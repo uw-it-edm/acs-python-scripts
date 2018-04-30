@@ -10,7 +10,7 @@ from AcsClient import AcsClient
 # get commandline arguments
 def getArgs():
    parser = argparse.ArgumentParser()
-   parser.add_argument('-c', '--conf', default='acs.yaml', help='conf file')
+   parser.add_argument('-c', '--conf', default='acs.yml', help='conf file')
    parser.add_argument('-s',  '--stage',  choices=['dev', 'local', 'test', 'prod'], default='dev', help='stage')
    parser.add_argument('-p', '--password', help='password')
    parser.add_argument('-u', '--user', default='admin', help='username')
