@@ -11,7 +11,7 @@ from AcsClient import AcsClient
 def getArgs():
    parser = argparse.ArgumentParser()
    parser.add_argument('-c', '--conf', default='acs.yaml', help='conf file')
-   parser.add_argument('-e', '--env', choices=['dev', 'local', 'test', 'prod'], default='dev', help='environment')
+   parser.add_argument('-s',  '--stage',  choices=['dev', 'local', 'test', 'prod'], default='dev', help='stage')
    parser.add_argument('-p', '--password', help='password')
    parser.add_argument('-u', '--user', default='admin', help='username')
    parser.add_argument('--url', help='urlbase, e.g. http://localhost:8080')
@@ -30,7 +30,7 @@ def getConfig(filename, stage='dev'):
         ret = conf
         if conf['default']:
             ret = conf['default']
-            if stage and conf[stage]:  # override default
+            if stage and stage in conf:  # override default
                 for key in conf[stage]:
                     ret[key] = conf[stage][key]
 
@@ -83,7 +83,7 @@ def main():
     args = getArgs()
     conf = {}
     if args.conf:
-        conf = getConfig(args.conf)
+        conf = getConfig(args.conf, args.stage)
 
     # config logging
     # TODO get log file and level from config file

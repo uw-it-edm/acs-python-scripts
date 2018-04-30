@@ -1,0 +1,25 @@
+default:
+  user: <admin user name e.g. 'admin'>
+  password: <admin user password>
+  url: <Alfresco Repository URL, e.g. 'https://localhost:8080'>
+  sites:
+    - id: testsite 
+      title: Test Site 
+      description:  Test Site
+      roles:
+        - role: SiteConsumer
+          group: <group name with readonly access>
+        - role: SiteCollaborator
+          group: <group name with R/W access>
+
+dev:
+  password: <admin user password for dev stage>
+  url: <Alfresco Repository URL for dev stage, e.g. 'https://dev.example.com'>
+
+test:
+  password: <admin user password for test stage>
+  url: <Alfresco Repository URL for test stage, e.g. 'https://test.example.com'>
+
+prod:
+  password: <admin user password for prod stage>
+  url: <Alfresco Repository URL for prod stage, e.g. 'https://prod.example.com'>
