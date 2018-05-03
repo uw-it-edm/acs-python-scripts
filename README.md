@@ -3,8 +3,8 @@
 #### To run the scripts
 * copy acs.yaml.example to acs.yaml
 * enter your configuration values into acs.yaml
-* python ./acs.py
+* `python ./acs.py`
 
 #### To run tests 
-* pip instal responses 
-* python AcsClientTestCase.py
+* `pip install responses` 
+* `python AcsClientTestCase.py`
