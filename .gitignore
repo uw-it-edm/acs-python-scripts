@@ -3,3 +3,4 @@
 *.yaml
 *.yml
 
+!/.travis.yml

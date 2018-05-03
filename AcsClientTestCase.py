@@ -1,10 +1,9 @@
 import unittest
-import requests
+
 import responses
 
 from AcsClient import AcsClient
 
-from pprint import pprint
 
 class AcsClientTestCase(unittest.TestCase):
     def setUp(self):
