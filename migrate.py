@@ -5,27 +5,30 @@ import csv
 import logging
 import os
 import time
-import yaml
 from datetime import datetime
 from xml.dom import minidom
 from xml.etree import ElementTree
 from xml.etree.ElementTree import Element, SubElement
 
+import yaml
+
 import util
 
+
 class WccDateFormatError(Exception):
-    def __init__(self, blDateFormat):
-        self.blDateFormat = blDateFormat
+    def __init__(self, bl_date_format):
+        self.bl_date_format = bl_date_format
 
     def __str__(self):
-        return repr(self.blDateForma)
+        return repr(self.bl_date_format)
 
 
 class ContentModelDefinition:
-    def __init__(self, profile, fields, aspects):
+    def __init__(self, profile, fields, aspects, content_type):
         self.profile = profile
         self.fields = fields
         self.aspects = aspects
+        self.content_type = content_type
 
 
 class WebcenterData:
@@ -38,7 +41,6 @@ class WebcenterData:
         self.number_of_fields = int(number_of_fields)
         self.data_rows = []
         self.field_names = []
-        # TODO: Should we validate that these are only date fields?
         self.bl_field_types = [field.split(' ')[0] for field in bl_field_types.split(
             ',')]  # convert string of "'<fieldName> <fieldType>','<fieldName> <fieldType>'..." into an array of <fieldName>
 
@@ -69,7 +71,6 @@ class WebcenterData:
 
 
 class HdaParser:
-    # TODO: is it ok to assume that the BL_DATE_FORMAT will be consistent? this allows me to hardcode the format
     EXPECTED_BL_DATE_FORMAT = "'{ts' ''yyyy-MM-dd HH:mm:ss{.SSS}[Z]'''}'!tAmerica/Los_Angeles"
 
     def __init__(self, content_model_definition):
@@ -159,45 +160,56 @@ class WccXmlWriter:
         return primary_file_name
 
     def __write_xml_file(self, xml_doc, primary_file_name, xml_file_output_dir):
+        def append_doc_type(xml_file):  # ElemenTree is unable to add DOCTYPE
+            with open(xml_file, 'r') as f:
+                content = f.readlines()
+
+            final_content = content[:1]
+            final_content.append(
+                '<!DOCTYPE properties SYSTEM "http://java.sun.com/dtd/properties.dtd">')
+            final_content.extend(content[1:])
+
+            with open(xml_file, 'w') as f:
+                f.writelines(final_content)
+
         util.make_dirs(xml_file_output_dir)
 
         xml_file_name = primary_file_name + ".metadata.properties.xml"
         xml_file = os.path.join(xml_file_output_dir, xml_file_name)
         logging.debug('writing to xml: ' + xml_file)
 
-        ElementTree.ElementTree(xml_doc).write(xml_file)
+        ElementTree.ElementTree(xml_doc).write(xml_file, encoding='utf-8', xml_declaration=True)
+        append_doc_type(xml_file)
 
     def __print_xml_to_screen(self, xml_doc, print_to_screen):
         if print_to_screen:
             print self.__prettify_xml(xml_doc)
 
     def __create_xml(self, document_index):
-        def generate_key(field):
-            # TODO: Do I want to handle type by specifying it in the yaml?
-            # 'type' is special field that contains the content model name and does not possess a prefix
-            if 'prefix' in field:
+        def add_content_type(document):
+            child = SubElement(document, 'entry', {'key': 'type'})
+            child.text = self.wcc_data.content_model_definition.content_type
+
+        def add_aspects(document):
+            if len(self.wcc_data.content_model_definition.aspects) > 0:
+                child = SubElement(document, 'entry', {'key': 'aspects'})
+                aspects = ','.join(self.wcc_data.content_model_definition.aspects)
+                child.text = aspects
+
+        def add_fields(document):
+            for field in self.wcc_data.content_model_definition.fields:
+                source_field = field['source_field']
+                field_index = self.wcc_data.field_names.index(source_field)
+
                 key = field['prefix'] + ':' + field['name']
-            else:
-                key = field['name']
-            return key
+                child = SubElement(document, 'entry', {'key': key})
+                child.text = str(self.wcc_data.data_rows[document_index][
+                                     field_index])  # since we're storing Dates as Dates then we need to use str()
 
         xml_doc = Element('properties')
-
-        if len(self.wcc_data.content_model_definition.aspects) > 0:
-            child = SubElement(xml_doc, 'entry', {'key': 'aspects'})
-            aspects = ','.join(self.wcc_data.content_model_definition.aspects)
-            child.text = aspects
-
-        for field in self.wcc_data.content_model_definition.fields:
-            source_field = field['source_field']
-            field_index = self.wcc_data.field_names.index(source_field)
-
-            # TODO: should we attempt to validate the field value against the content_model's specified type?
-            # TODO: Should we be encoding dates differently?
-            key = generate_key(field)
-            child = SubElement(xml_doc, 'entry', {'key': key})
-            child.text = str(self.wcc_data.data_rows[document_index][
-                                 field_index])  # since we're storing Dates as Dates then we need to use str()
+        add_content_type(xml_doc)
+        add_aspects(xml_doc)
+        add_fields(xml_doc)
 
         return xml_doc
 
@@ -232,8 +244,6 @@ class HdaTranslator:
         logging.info('Content Profile: ' + wcc_data.content_model_definition.profile)
         logging.info('Number of data rows: ' + str(wcc_data.number_of_data_rows))
 
-        # TODO: validate wcc data makes sense - number of rows, & number of fields
-
         if self.csv_file:
             wcc_data.write_csv(self.csv_file)
 
@@ -249,22 +259,25 @@ class HdaTranslator:
             for content_model in content_models:
                 profile = content_model['profile']
                 if profile_name == profile:
+                    content_type = content_model['content_type']
                     fields = [field for field in content_model['fields']]
                     aspects = content_model['aspects']
-                    content_model_definition = ContentModelDefinition(profile, fields, aspects)
+                    content_model_definition = ContentModelDefinition(profile, fields, aspects,
+                                                                      content_type)
 
         if content_model_definition is None:
             raise Exception("Invalid profile '" + profile_name + "' for file '" + file_name + "'")
         return content_model_definition
 
 
-def parseArguments():
+def parse_arguments():
     parser = argparse.ArgumentParser()
     parser.add_argument('-i', '--input', help='The input .hda file', required=True)
     parser.add_argument('--csv', help='An optional csv file for output of all the migrated data')
     parser.add_argument('--printToScreen', help='Print output xml to screen', action='store_true')
     parser.add_argument('-o', '--output', help='The output directory for xml files', required=True)
-    parser.add_argument('-n', '--numberToProcess', help='The number of documents to process, defaults to all',
+    parser.add_argument('-n', '--numberToProcess',
+                        help='The number of documents to process, defaults to all',
                         type=int)
     parser.add_argument('-m', '--contentModelDefinition',
                         help='The definition of the content model', required=True)
@@ -273,14 +286,14 @@ def parseArguments():
     return parser.parse_args()
 
 
-def configureLogging():
+def configure_logging():
     logger = logging.getLogger()
     logger.setLevel(logging.INFO)
 
 
 def main():
-    args = parseArguments()
-    configureLogging()
+    args = parse_arguments()
+    configure_logging()
 
     translator = HdaTranslator(args.contentModelDefinition,
                                args.profile,
