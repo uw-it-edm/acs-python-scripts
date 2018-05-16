@@ -1,0 +1,24 @@
+content_models:
+  - profile: 'PROFILE_1'
+    content_type: 'customPrefix:PROFILE_1'
+    aspects:
+      - 'cm:author'
+      - 'cm:versionable'
+    fields:
+      - name: 'alfresco_field_1'
+        prefix: 'cm'
+        source_field: 'hdaFieldName'
+        type: 'text'
+      - name: 'alfresco_field_2'
+        prefix: 'customPrefix'
+        source_field: 'hdaFieldName_2'
+        type: 'date'
+  - profile: 'PROFILE_2'
+    content_type: 'customPrefix2:PROFILE_2'
+    aspects:
+      - 'cm:author'
+    fields:
+      - name: 'alfresco_field_1'
+        prefix: 'customPrefix2'
+        source_field: 'aDifferentName'
+        type: 'text'
