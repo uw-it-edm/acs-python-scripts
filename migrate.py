@@ -178,7 +178,7 @@ class WccXmlWriter:
         xml_file = os.path.join(xml_file_output_dir, xml_file_name)
         logging.debug('writing to xml: ' + xml_file)
 
-        ElementTree.ElementTree(xml_doc).write(xml_file, encoding='utf-8', xml_declaration=True)
+        ElementTree.ElementTree(xml_doc).write(xml_file, encoding='UTF-8', xml_declaration=True)
         append_doc_type(xml_file)
 
     def __print_xml_to_screen(self, xml_doc, print_to_screen):
@@ -200,11 +200,14 @@ class WccXmlWriter:
             for field in self.wcc_data.content_model_definition.fields:
                 source_field = field['source_field']
                 field_index = self.wcc_data.field_names.index(source_field)
+                field_value = self.wcc_data.data_rows[document_index][field_index]
+
+                if field['type'] == 'date' and field_value != '':
+                    field_value = field_value.isoformat()
 
                 key = field['prefix'] + ':' + field['name']
                 child = SubElement(document, 'entry', {'key': key})
-                child.text = str(self.wcc_data.data_rows[document_index][
-                                     field_index])  # since we're storing Dates as Dates then we need to use str()
+                child.text = field_value
 
         xml_doc = Element('properties')
         add_content_type(xml_doc)
