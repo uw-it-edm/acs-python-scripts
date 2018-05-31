@@ -3,8 +3,8 @@ default:
   password: <admin user password>
   url: <Alfresco Repository URL, e.g. 'https://localhost:8080'>
   sites:
-    - id: testsite 
-      title: Test Site 
+    - id: testsite
+      title: Test Site
       description:  Test Site
       roles:
         - role: SiteConsumer

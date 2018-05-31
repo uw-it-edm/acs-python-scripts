@@ -1,0 +1,30 @@
+site_rules:
+  - site: 'testsite'
+    rules:
+    - '{
+        "title": "Assign custom type",
+         "description": "Assign custom type",
+         "ruleType": [
+             "inbound"
+         ],
+         "applyToChildren": true,
+         "executeAsynchronously": false,
+         "disabled": false,
+         "action": {
+             "actionDefinitionName": "composite-action",
+             "executeAsync": false,
+             "actions": [
+                 {
+                     "actionDefinitionName": "specialise-type",
+                     "parameterValues": {
+                         "type-name": "customPrefix:customType"
+                     }
+                 }
+             ],
+             "conditions": [
+                 {
+                     "conditionDefinitionName": "no-condition"
+                 }
+             ]
+         }
+     }'

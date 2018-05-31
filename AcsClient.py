@@ -1,4 +1,5 @@
-import requests 
+import requests
+
 
 #############################################
 class AcsClient:
@@ -6,8 +7,8 @@ class AcsClient:
     # constructor
     def __init__(self, urlbase, user, pw):
         self.urlbase = urlbase
-        self.apiprefix = urlbase + '/alfresco/api/-default-/public/alfresco/versions/1'
-        self.sapiprefix = urlbase + '/alfresco/s/api'
+        self.api_prefix = urlbase + '/alfresco/api/-default-/public/alfresco/versions/1'
+        self.web_script_api_prefix = urlbase + '/alfresco/s/api'
         self.user = user
         self.pw = pw
         self.auth = (user, pw)
@@ -40,77 +41,89 @@ class AcsClient:
     ######################################
     # groups API 
     def createRootGroup(self, id, displayName):
-        url = self.apiprefix + '/groups'
-        data = {"id":id,"displayName":displayName}
+        url = self.api_prefix + '/groups'
+        data = {"id": id, "displayName": displayName}
         r = self.post(url, data=data)
         return r and r['entry']
 
     ######################################
     # nodes API 
     def getNode(self, nodeId):
-        url = self.apiprefix + '/nodes/' + nodeId
+        url = self.api_prefix + '/nodes/' + nodeId
         r = self.get(url)
         return r and r['entry']
 
     def uploadContent(self, folderId, files):
-        url = self.apiprefix + '/nodes/' + folderId + '/children'
+        url = self.api_prefix + '/nodes/' + folderId + '/children'
         r = self.post(url, files=files)
         return r and r['entry']
-     
+
     def setPermissions(self, id, permissions):
-        url = self.apiprefix + '/nodes/' + id
+        url = self.api_prefix + '/nodes/' + id
         data = {"permissions": permissions}
         r = self.put(url, data=data)
         return r
-        
+
+    ######################################
+    # rules API
+    def getRules(self, node_id):
+        url = self.web_script_api_prefix + '/node/workspace/SpacesStore/' + node_id + '/ruleset/rules'
+        result = self.get(url)
+        return result
+
+    def createRule(self, node_id, rule_json):
+        url = self.web_script_api_prefix + '/node/workspace/SpacesStore/' + node_id + '/ruleset/rules'
+        result = self.post(url, data=rule_json)
+        return result
+
     ######################################
     # sites API 
     def createSite(self, id, title, desc, visibility='PRIVATE'):
-        url = self.apiprefix + '/sites'
-        data = {"id":id,"title":title, "description":desc, "visibility":visibility}
+        url = self.api_prefix + '/sites'
+        data = {"id": id, "title": title, "description": desc, "visibility": visibility}
         r = self.post(url, data=data)
         return r and r['entry']
-     
+
     def getSite(self, siteId):
-        url = self.apiprefix + '/sites/' + siteId
+        url = self.api_prefix + '/sites/' + siteId
         r = self.get(url)
         return r and r['entry']
 
     def getSites(self):
-        url = self.apiprefix + '/sites'
+        url = self.api_prefix + '/sites'
         r = self.get(url)
         return r and r['list'] and r['list']['entries']
 
     def addSiteUser(self, siteId, username, role='SiteConsumer'):
-        url = self.apiprefix + '/sites/' + siteId + '/members'
-        data = [{"role":role,"id": username}]
+        url = self.api_prefix + '/sites/' + siteId + '/members'
+        data = [{"role": role, "id": username}]
         r = self.post(url, data=data)
         return r and r['entry']
-     
+
     def getSiteGroup(self, siteId, group):
         fullName = group if group.startswith('GROUP_') else 'GROUP_' + group
-        url = self.sapiprefix + '/sites/' + siteId + '/memberships/' + fullName
+        url = self.web_script_api_prefix + '/sites/' + siteId + '/memberships/' + fullName
         r = self.get(url)
         return r
-     
+
     def addSiteGroup(self, siteId, group, role='SiteConsumer'):
-        url = self.sapiprefix + '/sites/' + siteId + '/memberships'
+        url = self.web_script_api_prefix + '/sites/' + siteId + '/memberships'
         fullName = group if group.startswith('GROUP_') else 'GROUP_' + group
-        data = {"role":role, "group": {"fullName": fullName} }
+        data = {"role": role, "group": {"fullName": fullName}}
         r = self.post(url, data=data)
         return r
-     
+
     def getSiteContainers(self, siteId):
-        url = self.apiprefix + '/sites/' + siteId + '/containers'
+        url = self.api_prefix + '/sites/' + siteId + '/containers'
         r = self.get(url)
         return r and r['list'] and r['list']['entries']
 
     def getSiteMembers(self, siteId):
-        url = self.apiprefix + '/sites/' + siteId + '/members'
+        url = self.api_prefix + '/sites/' + siteId + '/members'
         r = self.get(url)
         return r and r['list'] and r['list']['entries']
 
     def getDocumentLibrary(self, siteId):
-        url = self.apiprefix + '/sites/' + siteId + '/containers/documentLibrary'
+        url = self.api_prefix + '/sites/' + siteId + '/containers/documentLibrary'
         r = self.get(url)
         return r and r['entry']
