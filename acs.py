@@ -14,7 +14,7 @@ from AcsClient import AcsClient
 def getArgs():
     parser = argparse.ArgumentParser()
     parser.add_argument('-c', '--conf', default='acs.yml', help='conf file')
-    parser.add_argument('-r', '--rules', default='rules.yml', help='rules config file')
+    parser.add_argument('-r', '--rules', help='rules config file')
     parser.add_argument('-s', '--stage', choices=['dev', 'local', 'test', 'prod'], default='dev',
                         help='stage')
     parser.add_argument('-p', '--password', help='password')
@@ -160,7 +160,7 @@ def main():
         for site in conf['sites']:
             createOrUpdateSite(acs, site);
             site_id = site['id']
-            if site_id in rules:
+            if rules and (site_id in rules):
                 create_rules(acs, site_id, rules[site_id])
 
     logging.info('end')
