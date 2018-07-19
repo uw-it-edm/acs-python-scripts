@@ -48,8 +48,14 @@ class AcsClient:
 
     ######################################
     # nodes API 
-    def getNode(self, nodeId):
+    def getNodeById(self, nodeId):
         url = self.api_prefix + '/nodes/' + nodeId
+        r = self.get(url)
+        return r and r['entry']
+
+    def getNodeByPath(self, path):
+        path = path if path.startswith('Sites/') else 'Sites/' + path
+        url = self.api_prefix + '/nodes/-root-?relativePath=' + path
         r = self.get(url)
         return r and r['entry']
 
@@ -66,16 +72,20 @@ class AcsClient:
 
     ######################################
     # rules API
-    def getRules(self, node_id):
-        url = self.web_script_api_prefix + '/node/workspace/SpacesStore/' + node_id + '/ruleset/rules'
+    def getRules(self, folderId):
+        url = self.web_script_api_prefix + '/node/workspace/SpacesStore/' + folderId + '/ruleset/rules'
         result = self.get(url)
+        return result and result['data']
+
+    def createRule(self, folderId, ruleData):
+        url = self.web_script_api_prefix + '/node/workspace/SpacesStore/' + folderId + '/ruleset/rules'
+        result = self.post(url, data=ruleData)
         return result
 
-    def createRule(self, node_id, rule_json):
-        url = self.web_script_api_prefix + '/node/workspace/SpacesStore/' + node_id + '/ruleset/rules'
-        result = self.post(url, data=rule_json)
+    def updateRule(self, folderId, ruleId, ruleData):
+        url = self.web_script_api_prefix + '/node/workspace/SpacesStore/' + folderId + '/ruleset/rules/' + ruleId
+        result = self.put(url, data=ruleData)
         return result
-
     ######################################
     # sites API 
     def createSite(self, id, title, desc, visibility='PRIVATE'):
