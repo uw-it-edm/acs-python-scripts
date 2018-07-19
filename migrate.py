@@ -15,6 +15,17 @@ import yaml
 import util
 
 
+class InvalidDocument(Exception):
+    def __init__(self,field_name, field_type, field_value, document_id):
+        self.field_name = field_name
+        self.field_type = field_type
+        self.field_value = field_value
+        self.document_id = document_id
+
+    def get_error_message(self):
+        return "Invalid Type - Field '"+self.field_name+"' expected type: '" + self.field_type + "', received value: '" + self.field_value + "' for document: " + self.document_id
+
+
 class WccDateFormatError(Exception):
     def __init__(self, bl_date_format):
         self.bl_date_format = bl_date_format
@@ -141,18 +152,23 @@ class HdaParser:
 
 
 class WccXmlWriter:
-    def __init__(self, wcc_data):
+    def __init__(self, wcc_data, should_validate_field_value):
         self.wcc_data = wcc_data
         self.primary_file_field_index = self.wcc_data.field_names.index('primaryFile')
+        self.should_validate_field_value = should_validate_field_value
 
     def write_xml_files(self, output, print_to_screen):
         logging.info('writing xml to: ' + output)
 
         for i in range(0, self.wcc_data.number_of_data_rows):
-            xml_doc = self.__create_xml(i)
-            primary_file_name = self.__get_primary_file_name(i)
-            self.__print_xml_to_screen(xml_doc, print_to_screen)
-            self.__write_xml_file(xml_doc, primary_file_name, output)
+            try:
+                xml_doc = self.__create_xml(i)
+                primary_file_name = self.__get_primary_file_name(i)
+                self.__print_xml_to_screen(xml_doc, print_to_screen)
+                self.__write_xml_file(xml_doc, primary_file_name, output)
+            except InvalidDocument as error:
+                #if there is an invalid document, don't write the file and just return an error message
+                logging.error(error.get_error_message())
 
     def __get_primary_file_name(self, document_index):
         primary_file = self.wcc_data.data_rows[document_index][self.primary_file_field_index]
@@ -199,15 +215,41 @@ class WccXmlWriter:
         def add_fields(document):
             for field in self.wcc_data.content_model_definition.fields:
                 source_field = field['source_field']
+                field_type = field['type']
+                field_name = field['name']
                 field_index = self.wcc_data.field_names.index(source_field)
                 field_value = self.wcc_data.data_rows[document_index][field_index]
 
-                if field['type'] == 'date' and field_value != '':
+                if self.should_validate_field_value:
+                    validate_field_value(field_name, field_type, field_value)
+
+                if field_type == 'date' and field_value != '':
                     field_value = field_value.isoformat()
 
-                key = field['prefix'] + ':' + field['name']
-                child = SubElement(document, 'entry', {'key': key})
-                child.text = field_value
+                if (field_type == 'date' or field_type == 'int') and field_value == '':
+                    pass  # Don't write date or int fields if they don't have values
+                else:
+                    key = field['prefix'] + ':' + field['name']
+                    child = SubElement(document, 'entry', {'key': key})
+                    child.text = field_value
+
+
+        def validate_field_value(field_name, field_type, field_value):
+            document_id = self.wcc_data.data_rows[document_index][0]
+
+            if field_type == 'int':
+                if field_value != '':
+                    try:
+                        value = int(field_value)
+                    except ValueError:
+                        raise InvalidDocument(field_name, field_type, field_value, document_id)
+            if field_type == 'date':
+                if field_value != '':
+                    try:
+                        value = field_value.isoformat()
+                    except AttributeError:
+                        raise InvalidDocument(field_name, field_type, field_value, document_id)
+
 
         xml_doc = Element('properties')
         add_content_type(xml_doc)
@@ -224,7 +266,8 @@ class WccXmlWriter:
 
 class HdaTranslator:
     def __init__(self, content_model_definition_file, content_model_profile, csv_file,
-                 hda_input_file, number_of_docs_to_process, print_to_screen, xml_output_directory):
+                 hda_input_file, number_of_docs_to_process, print_to_screen, xml_output_directory,
+                 should_validate_field_value):
         self.content_model_definition_file = content_model_definition_file
         self.content_model_profile = content_model_profile
         self.csv_file = csv_file
@@ -232,6 +275,7 @@ class HdaTranslator:
         self.number_of_docs_to_process = number_of_docs_to_process
         self.print_to_screen = print_to_screen
         self.xml_output_directory = xml_output_directory
+        self.should_validate_field_value = should_validate_field_value
 
     def run(self):
         # Load Content Model
@@ -251,7 +295,7 @@ class HdaTranslator:
             wcc_data.write_csv(self.csv_file)
 
         if self.xml_output_directory:
-            wcc_xml_writer = WccXmlWriter(wcc_data)
+            wcc_xml_writer = WccXmlWriter(wcc_data, self.should_validate_field_value)
             wcc_xml_writer.write_xml_files(self.xml_output_directory, self.print_to_screen)
 
     def __load_content_model(self, file_name, profile_name):
@@ -286,6 +330,8 @@ def parse_arguments():
                         help='The definition of the content model', required=True)
     parser.add_argument('-p', '--profile',
                         help='The profile to load from the content model definition', required=True)
+    parser.add_argument('--validate', help='Validate data based on field type, and print to screen',
+                        action='store_true')
     return parser.parse_args()
 
 
@@ -304,7 +350,8 @@ def main():
                                args.input,
                                args.numberToProcess,
                                args.printToScreen,
-                               args.output)
+                               args.output,
+                               args.validate)
     start_time = time.time()
 
     translator.run()
