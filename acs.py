@@ -3,6 +3,7 @@
 import argparse
 import json
 import logging
+from os.path import isfile
 
 import yaml
 
@@ -47,7 +48,7 @@ def getConfig(filename, stage='dev'):
 # load rules conf file (yml)
 def load_rules_config(file_name):
     # sanity check
-    if not file_name:
+    if not file_name or not isfile(file_name):
         return None
 
     rules = {}
