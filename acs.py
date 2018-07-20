@@ -3,6 +3,7 @@
 import argparse
 import json
 import logging
+from os.path import isfile
 
 import yaml
 
@@ -14,7 +15,7 @@ from AcsClient import AcsClient
 def getArgs():
     parser = argparse.ArgumentParser()
     parser.add_argument('-c', '--conf', default='acs.yml', help='conf file')
-    parser.add_argument('-r', '--rules', help='rules config file')
+    parser.add_argument('-r', '--rules', help='rules config file', default='rules.yml')
     parser.add_argument('-s', '--stage', choices=['dev', 'local', 'test', 'prod'], default='dev',
                         help='stage')
     parser.add_argument('-p', '--password', help='password')
@@ -47,17 +48,12 @@ def getConfig(filename, stage='dev'):
 # load rules conf file (yml)
 def load_rules_config(file_name):
     # sanity check
-    if not file_name:
+    if not file_name or not isfile(file_name):
         return None
 
     rules = {}
     with open(file_name, 'r') as file:
-        rules_yml = yaml.load(file)
-        if 'site_rules' in rules_yml:
-            site_rule_list = rules_yml['site_rules']
-            for site_rules in site_rule_list:
-                site_name = site_rules['site']
-                rules[site_name] = site_rules['rules']
+        rules = yaml.load(file)
 
     return rules
 
@@ -74,30 +70,38 @@ def getAcsClient(args, conf):
     else:
         return AcsClient(urlbase, user, pw)
 
-
 #############################################
 # create or update rules
-# TODO: handle update rules
-def create_rules(acs, site_id, rules):
-    def exists(destination_id, title):
-        existing_rules = acs.getRules(destination_id)
-        existing_titles = [rules['title'] for rules in existing_rules['data']]
-        return title in existing_titles
+def createOrUpdateFolderRule(acs, folderPath, rule):
+    folderNode = acs.getNodeByPath(folderPath)
+    if not folderNode:
+        logging.warn('folder ' + folderPath + ' does not exist')
+        return
 
-    for rule_string in rules:
-        rule = json.loads(rule_string)
+    folderId = folderNode['id']
+        
+    existingRules = acs.getRules(folderId)
+    existingRuleIds = {rule['title']:rule['id'] for rule in existingRules}
+    title = rule['title']
+    if title in existingRuleIds:
+        # it is a lot easier and cheap to always update than trying to find if the rule config has changed
+        logging.info('updating rule "' + title +'"for folder ' + folderPath + "  " + existingRuleIds[title])
+        result = acs.updateRule(folderId, existingRuleIds[title], rule)
+    else:
+        logging.info('Creating rule "' + title + '" for folder: ' + folderPath)
+        result = acs.createRule(folderId, rule)
 
-        document_library = acs.getDocumentLibrary(site_id)
-        document_library_id = document_library['id']
+#############################################
+# create or update rule
+def createOrUpdateRule(acs, rule):
+    if not (rule and rule['folders'] and rule['rule']):
+        return
 
-        rule_exists = exists(document_library_id, rule['title'])
-        if rule_exists:
-            logging.warn('Skipping existing rule: ' + rule['title'])
-        else:
-            logging.info('Creating rule "' + rule['title'] + '" for site: ' + site_id)
-            result = acs.createRule(document_library_id, rule)
-            logging.debug('Create rule result: ' + str(result))
-
+    folders = rule['folders']
+    for folder in folders:
+        if folder.find("/documentLibrary") < 0:
+            folder = folder + '/documentLibrary'  # folder path
+        createOrUpdateFolderRule(acs, folder, rule['rule'])
 
 #############################################
 # create and update sites
@@ -160,11 +164,13 @@ def main():
         for site in conf['sites']:
             createOrUpdateSite(acs, site);
             site_id = site['id']
-            if rules and (site_id in rules):
-                create_rules(acs, site_id, rules[site_id])
+
+    # create and update rules
+    if rules:
+        for rule in rules:
+            createOrUpdateRule(acs, rule);
 
     logging.info('end')
-
 
 #############################################
 if __name__ == "__main__":

@@ -32,7 +32,7 @@ class AcsClientTestCase(unittest.TestCase):
                }
 
         responses.add(responses.GET, url, json=json, status=200)
-        ret = self.acsClient.getNode('1234')
+        ret = self.acsClient.getNodeById('1234')
         self.assertTrue(ret)
         self.assertEqual(ret['id'], '12345678-ccdb-4a97-a823-9315ebea500a')
 
