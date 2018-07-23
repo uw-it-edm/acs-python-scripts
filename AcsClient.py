@@ -59,6 +59,12 @@ class AcsClient:
         r = self.get(url)
         return r and r['entry']
 
+    def createFolder(self, parentId, folderName):
+        url = self.api_prefix + '/nodes/' + parentId+ '/children'
+        data = {"name": folderName, "nodeType": "cm:folder"}
+        r = self.post(url, data=data)
+        return r and r['entry']
+
     def uploadContent(self, folderId, files):
         url = self.api_prefix + '/nodes/' + folderId + '/children'
         r = self.post(url, files=files)

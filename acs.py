@@ -113,28 +113,40 @@ def createOrUpdateSite(acs, site):
         return
 
     # create site if it does not exist
-    s = acs.getSite(site['id'])
+    siteId = site['id']
+    s = acs.getSite(siteId)
     if s:
-        logging.info('site ' + site['id'] + ' already exists.')
+        logging.info('site ' + siteId + ' already exists.')
     else:
-        logging.info('create site ' + site['id'])
-        acs.createSite(site['id'], site['title'], site['description']);
+        logging.info('create site ' + siteId)
+        s = acs.createSite(siteId, site['title'], site['description']);
 
     # add group roles to site
     roles = site['roles'] if 'roles' in site else []
     for r in roles:
         if 'role' in r and 'group' in r:
-            g = acs.getSiteGroup(site['id'], r['group'])
+            g = acs.getSiteGroup(siteId, r['group'])
             if g and 'role' in g and g['role'] == r['role']:
                 logging.info(
                     'group ' + r['group'] + ' with role ' + r['role'] + ' already exists on site ' +
-                    site['id'])
+                    siteId)
             else:
                 logging.info(
-                    'add group ' + r['group'] + ' with role ' + r['role'] + ' to site ' + site[
-                        'id'])
-                acs.addSiteGroup(site['id'], r['group'], r['role'])
+                    'add group ' + r['group'] + ' with role ' + r['role'] + ' to site ' + siteId)
+                acs.addSiteGroup(siteId, r['group'], r['role'])
 
+    # create folders
+    folders = site['folders'] if 'folders' in site else []
+    for folder in folders:
+        folderName = folder['name']
+        folderObj = acs.getNodeByPath(siteId + '/documentLibrary/' + folderName)
+        if (folderObj):
+            logging.info('folder ' + folderName + ' already exists')
+        else:
+            docLib = acs.getDocumentLibrary(s['id'])
+            acs.createFolder(docLib['id'], folderName);
+            logging.info('creating folder ' + folderName + ' in ' + siteId)
+        
 
 #############################################
 # main
@@ -163,7 +175,6 @@ def main():
     if conf and conf['sites']:
         for site in conf['sites']:
             createOrUpdateSite(acs, site);
-            site_id = site['id']
 
     # create and update rules
     if rules:
