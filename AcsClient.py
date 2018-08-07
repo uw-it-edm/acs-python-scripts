@@ -8,6 +8,7 @@ class AcsClient:
     def __init__(self, urlbase, user, pw):
         self.urlbase = urlbase
         self.api_prefix = urlbase + '/alfresco/api/-default-/public/alfresco/versions/1'
+        self.gs_api_prefix = urlbase + '/alfresco/api/-default-/public/gs/versions/1'
         self.web_script_api_prefix = urlbase + '/alfresco/s/api'
         self.user = user
         self.pw = pw
@@ -92,6 +93,7 @@ class AcsClient:
         url = self.web_script_api_prefix + '/node/workspace/SpacesStore/' + folderId + '/ruleset/rules/' + ruleId
         result = self.put(url, data=ruleData)
         return result
+
     ######################################
     # sites API 
     def createSite(self, id, title, desc, visibility='PRIVATE'):
@@ -143,3 +145,34 @@ class AcsClient:
         url = self.api_prefix + '/sites/' + siteId + '/containers/documentLibrary'
         r = self.get(url)
         return r and r['entry']
+
+    ######################################
+    # file plan APIs 
+    def getRootRecordCategories(self):
+        url = self.gs_api_prefix + '/file-plans/-filePlan-/categories'
+        r = self.get(url)
+        return r and r['list'] and r['list']['entries']
+
+    def createRootRecordCategory(self, name): 
+        url = self.gs_api_prefix + '/file-plans/-filePlan-/categories'
+        data = {"name": name}
+        r = self.post(url, data=data)
+        return r and r['entry']
+
+    def getRecordCategoriesAndFolders(self, parentId):
+        url = self.gs_api_prefix + '/record-categories/' + parentId + '/children'
+        r = self.get(url)
+        return r and r['list'] and r['list']['entries']
+
+    def createRecordCategory(self, parentId, name): 
+        url = self.gs_api_prefix + '/record-categories/' + parentId + '/children'
+        data = {"name": name, "nodeType":"rma:recordCategory"}
+        r = self.post(url, data=data)
+        return r and r['entry']
+
+    def createRecordFolder(self, parentId, name): 
+        url = self.gs_api_prefix + '/record-categories/' + parentId + '/children'
+        data = {"name": name, "nodeType":"rma:recordFolder"}
+        r = self.post(url, data=data)
+        return r and r['entry']
+

@@ -15,6 +15,7 @@ from AcsClient import AcsClient
 def getArgs():
     parser = argparse.ArgumentParser()
     parser.add_argument('-c', '--conf', default='acs.yml', help='conf file')
+    parser.add_argument('-f', '--filePlan', help='file plan', default='filePlan.yml')
     parser.add_argument('-r', '--rules', help='rules config file', default='rules.yml')
     parser.add_argument('-s', '--stage', choices=['dev', 'local', 'test', 'prod'], default='dev',
                         help='stage')
@@ -46,16 +47,16 @@ def getConfig(filename, stage='dev'):
 
 #############################################
 # load rules conf file (yml)
-def load_rules_config(file_name):
+def load_yml_file(file_name):
     # sanity check
     if not file_name or not isfile(file_name):
         return None
 
-    rules = {}
+    ret = {}
     with open(file_name, 'r') as file:
-        rules = yaml.load(file)
+        ret = yaml.load(file)
 
-    return rules
+    return ret
 
 
 #############################################
@@ -71,6 +72,18 @@ def getAcsClient(args, conf):
         return AcsClient(urlbase, user, pw)
 
 #############################################
+# create or update Record Category or Folder
+def createOrUpdateRCF(acs, rcf):
+    if not (rule and rule['folders'] and rule['rule']):
+        return
+
+    folders = rule['folders']
+    for folder in folders:
+        if folder.find("/documentLibrary") < 0:
+            folder = folder + '/documentLibrary'  # folder path
+        createOrUpdateFolderRule(acs, folder, rule['rule'])
+
+#############################################
 # create or update rules
 def createOrUpdateFolderRule(acs, folderPath, rule):
     folderNode = acs.getNodeByPath(folderPath)
@@ -79,7 +92,7 @@ def createOrUpdateFolderRule(acs, folderPath, rule):
         return
 
     folderId = folderNode['id']
-        
+
     existingRules = acs.getRules(folderId)
     existingRuleIds = {rule['title']:rule['id'] for rule in existingRules}
     title = rule['title']
@@ -146,7 +159,46 @@ def createOrUpdateSite(acs, site):
             docLib = acs.getDocumentLibrary(s['id'])
             acs.createFolder(docLib['id'], folderName);
             logging.info('creating folder ' + folderName + ' in ' + siteId)
-        
+
+#############################################
+# createOrUpdate category
+def createOrUpdateChildCategories(acs, parentId, children):
+
+    exitingChildren = acs.getRecordCategoriesAndFolders(parentId)
+    exitingChildrenMap = {c['entry']['name']:{'id':c['entry']['id'], 'nodeType': c['entry']['nodeType']} for c in exitingChildren}
+
+    for child in children:
+        if child['name'] in exitingChildrenMap:
+            logging.info('Category ' + child['name'] + ' already exists.')
+            childCategory = exitingChildrenMap[child['name']]
+        elif 'nodeType' in child and child['nodeType']=='recordFolder':
+            logging.info('Creating folder ' + child['name'])
+            childCategory = acs.createRecordFolder(parentId, child['name'])
+        else:
+            logging.info('Creating category ' + child['name'])
+            childCategory = acs.createRecordCategory(parentId, child['name'])
+
+        if 'children' in child and ('nodeType' not in child or child['nodeType'] != 'recordFolder'):
+            createOrUpdateChildCategories(acs, childCategory['id'], child['children'])  # recursive call
+
+#############################################
+# process file plan
+def createOrUpdateFilePlan(acs, filePlan):
+    rootCategories = acs.getRootRecordCategories()
+    rootCategoriesMap = {c['entry']['name']:{'id':c['entry']['id'], 'nodeType': c['entry']['nodeType']} for c in rootCategories}
+
+    if filePlan:
+        for rc in filePlan:
+            category = None
+            if rc['name'] in rootCategoriesMap:
+                category = rootCategoriesMap[rc['name']]
+                logging.info('Root category ' + rc['name'] + ' already exists.')
+            else:
+                logging.info('Creating root category ' + rc['name'])
+                category = acs.createRootRecordCategory(rc['name'])
+
+            if 'children' in rc:
+                createOrUpdateChildCategories(acs, category['id'], rc['children']);
 
 #############################################
 # main
@@ -164,10 +216,6 @@ def main():
     if args.conf:
         conf = getConfig(args.conf, args.stage)
 
-    rules = None
-    if args.rules:
-        rules = load_rules_config(args.rules)
-
     # get ACS client
     acs = getAcsClient(args, conf)
 
@@ -177,9 +225,19 @@ def main():
             createOrUpdateSite(acs, site);
 
     # create and update rules
+    rules = None
+    if args.rules:
+        rules = load_yml_file(args.rules)
+
     if rules:
         for rule in rules:
             createOrUpdateRule(acs, rule);
+
+    # file plan
+    filePlan = None
+    if args.filePlan:
+        filePlan = load_yml_file(args.filePlan)
+        createOrUpdateFilePlan(acs, filePlan)
 
     logging.info('end')
 
