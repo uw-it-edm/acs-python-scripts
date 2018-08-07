@@ -31,7 +31,9 @@ optional arguments:
                         The definition of the content model
   -p PROFILE, --profile PROFILE
                         The profile to load from the content model definition
+  --validate            Validate data based on field type, skipping invalid data and printing error to screen
+
 ```
 
-example: `python ./migrate.py -i oracl_export.hda --contentModelDefinition=./content_models.yml --csv=./export.csv  -o ./acs_import -p PROFILE_1  --printToScreen -n 1
+example: `python ./migrate.py -i oracl_export.hda --contentModelDefinition=./content_models.yml --csv=./export.csv  -o ./acs_import -p PROFILE_1  --printToScreen --validate -n 1
 `
