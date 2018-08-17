@@ -185,7 +185,9 @@ def createOrUpdateChildCategories(acs, parentId, children):
 # process file plan
 def createOrUpdateFilePlan(acs, filePlan):
     rootCategories = acs.getRootRecordCategories()
-    rootCategoriesMap = {c['entry']['name']:{'id':c['entry']['id'], 'nodeType': c['entry']['nodeType']} for c in rootCategories}
+    rootCategoriesMap = {}
+    if rootCategories:
+        rootCategoriesMap = {c['entry']['name']:{'id':c['entry']['id'], 'nodeType': c['entry']['nodeType']} for c in rootCategories}
 
     if filePlan:
         for rc in filePlan:
@@ -237,6 +239,8 @@ def main():
     filePlan = None
     if args.filePlan:
         filePlan = load_yml_file(args.filePlan)
+
+    if filePlan:
         createOrUpdateFilePlan(acs, filePlan)
 
     logging.info('end')
