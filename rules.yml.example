@@ -1,30 +1,38 @@
-site_rules:
-  - site: 'testsite'
-    rules:
-    - '{
-        "title": "Assign custom type",
-         "description": "Assign custom type",
-         "ruleType": [
-             "inbound"
-         ],
-         "applyToChildren": true,
-         "executeAsynchronously": false,
-         "disabled": false,
-         "action": {
-             "actionDefinitionName": "composite-action",
-             "executeAsync": false,
-             "actions": [
-                 {
-                     "actionDefinitionName": "specialise-type",
-                     "parameterValues": {
-                         "type-name": "customPrefix:customType"
-                     }
-                 }
-             ],
-             "conditions": [
-                 {
-                     "conditionDefinitionName": "no-condition"
-                 }
-             ]
-         }
-     }'
+# rules:
+- folders:
+    - testsite1
+    - testsite2
+  rule:
+    title: my-first-rule
+    description: First rule
+    ruleType: ["inbound"]
+    applyToChildren: true
+    executeAsynchronously: true
+    disabled: false
+    action:
+      actionDefinitionName: composite-action
+      executeAsync: false
+      actions:
+        - actionDefinitionName: Action1
+      conditions:
+        - conditionDefinitionName: is-subtype
+          parameterValues:
+            type: cm:content
+- folders:
+    - testsite1
+  rule:
+    title: my-second-rule
+    description: Second rule
+    ruleType: ["inbound", "update"]
+    applyToChildren: false
+    executeAsynchronously: false
+    disabled: false
+    action:
+      actionDefinitionName: composite-action
+      executeAsync: false
+      actions:
+        - actionDefinitionName: AnotherAction
+      conditions:
+        - conditionDefinitionName: is-subtype
+          parameterValues:
+            type: cm:content
