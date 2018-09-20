@@ -72,18 +72,6 @@ def getAcsClient(args, conf):
         return AcsClient(urlbase, user, pw)
 
 #############################################
-# create or update Record Category or Folder
-def createOrUpdateRCF(acs, rcf):
-    if not (rule and rule['folders'] and rule['rule']):
-        return
-
-    folders = rule['folders']
-    for folder in folders:
-        if folder.find("/documentLibrary") < 0:
-            folder = folder + '/documentLibrary'  # folder path
-        createOrUpdateFolderRule(acs, folder, rule['rule'])
-
-#############################################
 # create or update rules
 def createOrUpdateFolderRule(acs, folderPath, rule):
     folderNode = acs.getNodeByPath(folderPath)
