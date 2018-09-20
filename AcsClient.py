@@ -1,6 +1,12 @@
 import requests
 from xml.etree import ElementTree
 
+######################################
+# convenience (module) functions
+# return full group Id
+def fullGroupId(groupId):
+    return groupId if groupId.startswith('GROUP_') else 'GROUP_' + groupId
+
 #############################################
 class AcsClient:
     ######################################
@@ -47,8 +53,7 @@ class AcsClient:
     ######################################
     # groups API 
     def getGroup(self, id):
-        fullId = id if id.startswith('GROUP_') else 'GROUP_' + id
-        url = self.api_prefix + '/groups/' + fullId
+        url = self.api_prefix + '/groups/' + fullGroupId(id)
         r = self.get(url)
         return r and r['entry']
 
@@ -59,21 +64,18 @@ class AcsClient:
         return r and r['entry']
 
     def createGroup(self, id, displayName, parentId='GROUP_uw_groups'):
-        fullParentId = parentId if parentId.startswith('GROUP_') else 'GROUP_' + parentId
         url = self.api_prefix + '/groups'
-        data = {"id": id, "displayName": displayName, "parentIds":[fullParentId]}
+        data = {"id": id, "displayName": displayName, "parentIds":[fullGroupId(parentId)]}
         r = self.post(url, json=data)
         return r and r['entry']
 
     def getGroupMembers(self, groupId):
-        fullId = groupId if groupId.startswith('GROUP_') else 'GROUP_' + groupId 
-        url = self.api_prefix + '/groups/' + fullId + '/members'
+        url = self.api_prefix + '/groups/' + fullGroupId(groupId) + '/members'
         r = self.get(url)
         return r and r['list'] and r['list'].r['entries']
 
     def addGroupMember(self, groupId, memberId, memberType='GROUP'):
-        fullId = groupId if groupId.startswith('GROUP_') else 'GROUP_' + groupId 
-        url = self.api_prefix + '/groups/' + fullId + '/members'
+        url = self.api_prefix + '/groups/' + fullGroupId(groupId) + '/members'
         data = {"id": memberId, "memberType": memberType}
         r = None
         try:
@@ -159,17 +161,15 @@ class AcsClient:
         return r and r['entry']
 
     def getSiteGroup(self, siteId, group):
-        fullName = group if group.startswith('GROUP_') else 'GROUP_' + group
-        url = self.web_script_api_prefix + '/sites/' + siteId + '/memberships/' + fullName
+        url = self.web_script_api_prefix + '/sites/' + siteId + '/memberships/' + fullGroupId(group)
         r = self.get(url)
         return r
 
     def addSiteGroup(self, siteId, group, role='SiteConsumer'):
         url = self.web_script_api_prefix + '/sites/' + siteId + '/memberships'
-        fullName = group if group.startswith('GROUP_') else 'GROUP_' + group
         if not self.getGroup(group):
             self.createGroup(group, group)
-        data = {"role": role, "group": {"fullName": fullName}}
+        data = {"role": role, "group": {"fullName": fullGroupId(group)}}
         r = self.post(url, json=data)
         return r
 
