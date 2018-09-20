@@ -4,4 +4,6 @@
 *.yml
 *.cnf
 
+export-*.csv
+
 !/.travis.yml
