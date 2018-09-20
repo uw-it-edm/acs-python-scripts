@@ -1,0 +1,5 @@
+[dev]
+host=localhost
+database=repo
+user=dbuser
+password=mydbpassword

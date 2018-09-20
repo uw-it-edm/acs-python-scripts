@@ -1,0 +1,26 @@
+# file plan
+title: Records Management
+description: Records Management Site
+compliance: DOD5015
+roles:
+  - role: SiteManager
+    group: acs_dev_team
+categories:
+  - name: 'r1'
+    children:
+      - name: 'r1.2'
+        children:
+          - name: 'r1.3'
+  - name: 'r2'
+    children:
+      - name: 'r2.1'
+        children:
+          - name: Cash
+            children:
+              - name: default
+                nodeType: recordFolder
+          - name: Invoices
+          - name: Journal Vouchers
+          - name: Purchase
+          - name: Travel Expense
+          - name: Forms

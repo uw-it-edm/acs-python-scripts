@@ -164,13 +164,13 @@ def createOrUpdateSite(acs, site):
 # createOrUpdate category
 def createOrUpdateChildCategories(acs, parentId, children):
 
-    exitingChildren = acs.getRecordCategoriesAndFolders(parentId)
-    exitingChildrenMap = {c['entry']['name']:{'id':c['entry']['id'], 'nodeType': c['entry']['nodeType']} for c in exitingChildren}
+    existingChildren = acs.getRecordCategoriesAndFolders(parentId)
+    existingChildrenMap = {c['entry']['name']:{'id':c['entry']['id'], 'nodeType': c['entry']['nodeType']} for c in existingChildren}
 
     for child in children:
-        if child['name'] in exitingChildrenMap:
+        if child['name'] in existingChildrenMap:
             logging.info('Category ' + child['name'] + ' already exists.')
-            childCategory = exitingChildrenMap[child['name']]
+            childCategory = existingChildrenMap[child['name']]
         elif 'nodeType' in child and child['nodeType']=='recordFolder':
             logging.info('Creating folder ' + child['name'])
             childCategory = acs.createRecordFolder(parentId, child['name'])
@@ -184,13 +184,39 @@ def createOrUpdateChildCategories(acs, parentId, children):
 #############################################
 # process file plan
 def createOrUpdateFilePlan(acs, filePlan):
+
+    if not filePlan:
+        return
+
+    # create RM site if necessary
+    siteId = 'rm'
+    if acs.getRmSite():
+        logging.info('RM site already exists')
+    else:
+        logging.info('creating RM site')
+        acs.createRmSite(filePlan['title'], filePlan['description'], filePlan['compliance'])
+
+    # add site role
+    roles = filePlan['roles'] if 'roles' in filePlan else []
+    for r in roles:
+        if 'role' in r and 'group' in r:
+            g = acs.getSiteGroup(siteId, r['group'])
+            if g and 'role' in g and g['role'] == r['role']:
+                logging.info(
+                    'group ' + r['group'] + ' with role ' + r['role'] + ' already exists on site ' +
+                    siteId)
+            else:
+                logging.info('add group ' + r['group'] + ' with role ' + r['role'] + ' to site ' + siteId)
+                acs.addSiteGroup(siteId, r['group'], r['role'])
+
+    # add categories and folders
     rootCategories = acs.getRootRecordCategories()
     rootCategoriesMap = {}
     if rootCategories:
         rootCategoriesMap = {c['entry']['name']:{'id':c['entry']['id'], 'nodeType': c['entry']['nodeType']} for c in rootCategories}
 
-    if filePlan:
-        for rc in filePlan:
+    if filePlan and filePlan['categories']:
+        for rc in filePlan['categories']:
             category = None
             if rc['name'] in rootCategoriesMap:
                 category = rootCategoriesMap[rc['name']]
@@ -221,6 +247,17 @@ def main():
     # get ACS client
     acs = getAcsClient(args, conf)
 
+    # create root group if it does not exist
+    if conf and conf['rootGroup']:
+        if not acs.getGroup(conf['rootGroup']):
+            acs.createRootGroup(conf['rootGroup'], conf['rootGroup'])
+
+    if conf and conf['adminGroup']:
+        adminGroup = conf['adminGroup'] if conf['adminGroup'].startswith('GROUP_') else 'GROUP_' + conf['adminGroup']
+        if not acs.getGroup(adminGroup):
+            acs.createGroup(adminGroup, adminGroup)
+        acs.addGroupMember('ALFRESCO_ADMINISTRATORS', adminGroup)
+
     # create and update sites
     if conf and conf['sites']:
         for site in conf['sites']:
@@ -244,6 +281,8 @@ def main():
         createOrUpdateFilePlan(acs, filePlan)
 
     logging.info('end')
+
+    return acs
 
 #############################################
 if __name__ == "__main__":

@@ -2,5 +2,6 @@
 *.pyc
 *.yaml
 *.yml
+*.cnf
 
 !/.travis.yml

@@ -1,5 +1,5 @@
 import requests
-
+from xml.etree import ElementTree
 
 #############################################
 class AcsClient:
@@ -16,36 +16,76 @@ class AcsClient:
 
     ######################################
     # get, post and put
+    def handleResponse(self, response):
+        if response.ok:
+            if response.headers['Content-Type'].startswith('application/json'):
+                return response.json()
+            elif response.headers['Content-Type'].startswith('text/xml'):
+                return ElementTree.fromstring(response.text)
+            elif response.headers['Content-Type'].startswith('text'):
+                return response.text
+            else:
+                return response.raw
+        else:
+            response.raise_for_status()
+
     def get(self, url):
         response = requests.get(url, auth=self.auth)
-        if response.ok:
-            return response.json()
-        elif response.status_code == requests.codes.not_found:
+        if response.status_code == requests.codes.not_found:
             return None
         else:
-            response.raise_for_status()
+            return self.handleResponse(response)
 
-    def post(self, url, data=None, files=None):
-        response = requests.post(url, auth=self.auth, json=data, files=files)
-        if response.ok:
-            return response.json()
-        else:
-            response.raise_for_status()
+    def post(self, url, json=None, data=None, files=None):
+        response = requests.post(url, auth=self.auth, json=json, data=data, files=files)
+        return self.handleResponse(response)
 
-    def put(self, url, data=None, files=None):
-        response = requests.put(url, auth=self.auth, json=data, files=files)
-        if response.ok:
-            return response.json()
-        else:
-            response.raise_for_status()
+    def put(self, url, json=None, data=None, files=None):
+        response = requests.put(url, auth=self.auth, json=json, data=data, files=files)
+        return self.handleResponse(response)
 
     ######################################
     # groups API 
+    def getGroup(self, id):
+        fullId = id if id.startswith('GROUP_') else 'GROUP_' + id
+        url = self.api_prefix + '/groups/' + fullId
+        r = self.get(url)
+        return r and r['entry']
+
     def createRootGroup(self, id, displayName):
         url = self.api_prefix + '/groups'
         data = {"id": id, "displayName": displayName}
-        r = self.post(url, data=data)
+        r = self.post(url, json=data)
         return r and r['entry']
+
+    def createGroup(self, id, displayName, parentId='GROUP_uw_groups'):
+        fullParentId = parentId if parentId.startswith('GROUP_') else 'GROUP_' + parentId
+        url = self.api_prefix + '/groups'
+        data = {"id": id, "displayName": displayName, "parentIds":[fullParentId]}
+        r = self.post(url, json=data)
+        return r and r['entry']
+
+    def getGroupMembers(self, groupId):
+        fullId = groupId if groupId.startswith('GROUP_') else 'GROUP_' + groupId 
+        url = self.api_prefix + '/groups/' + fullId + '/members'
+        r = self.get(url)
+        return r and r['list'] and r['list'].r['entries']
+
+    def addGroupMember(self, groupId, memberId, memberType='GROUP'):
+        fullId = groupId if groupId.startswith('GROUP_') else 'GROUP_' + groupId 
+        url = self.api_prefix + '/groups/' + fullId + '/members'
+        data = {"id": memberId, "memberType": memberType}
+        r = None
+        try:
+            r = self.post(url, json=data)
+        except requests.exceptions.HTTPError as ex:
+            if ex.response.status_code != requests.codes.conflict:
+                raise
+            # else member alfready in group
+        except:
+            raise
+
+        return r
 
     ######################################
     # nodes API 
@@ -63,7 +103,7 @@ class AcsClient:
     def createFolder(self, parentId, folderName):
         url = self.api_prefix + '/nodes/' + parentId+ '/children'
         data = {"name": folderName, "nodeType": "cm:folder"}
-        r = self.post(url, data=data)
+        r = self.post(url, json=data)
         return r and r['entry']
 
     def uploadContent(self, folderId, files):
@@ -74,7 +114,7 @@ class AcsClient:
     def setPermissions(self, id, permissions):
         url = self.api_prefix + '/nodes/' + id
         data = {"permissions": permissions}
-        r = self.put(url, data=data)
+        r = self.put(url, json=data)
         return r
 
     ######################################
@@ -86,12 +126,12 @@ class AcsClient:
 
     def createRule(self, folderId, ruleData):
         url = self.web_script_api_prefix + '/node/workspace/SpacesStore/' + folderId + '/ruleset/rules'
-        result = self.post(url, data=ruleData)
+        result = self.post(url, json=ruleData)
         return result
 
     def updateRule(self, folderId, ruleId, ruleData):
         url = self.web_script_api_prefix + '/node/workspace/SpacesStore/' + folderId + '/ruleset/rules/' + ruleId
-        result = self.put(url, data=ruleData)
+        result = self.put(url, json=ruleData)
         return result
 
     ######################################
@@ -99,7 +139,7 @@ class AcsClient:
     def createSite(self, id, title, desc, visibility='PRIVATE'):
         url = self.api_prefix + '/sites'
         data = {"id": id, "title": title, "description": desc, "visibility": visibility}
-        r = self.post(url, data=data)
+        r = self.post(url, json=data)
         return r and r['entry']
 
     def getSite(self, siteId):
@@ -115,7 +155,7 @@ class AcsClient:
     def addSiteUser(self, siteId, username, role='SiteConsumer'):
         url = self.api_prefix + '/sites/' + siteId + '/members'
         data = [{"role": role, "id": username}]
-        r = self.post(url, data=data)
+        r = self.post(url, json=data)
         return r and r['entry']
 
     def getSiteGroup(self, siteId, group):
@@ -127,8 +167,10 @@ class AcsClient:
     def addSiteGroup(self, siteId, group, role='SiteConsumer'):
         url = self.web_script_api_prefix + '/sites/' + siteId + '/memberships'
         fullName = group if group.startswith('GROUP_') else 'GROUP_' + group
+        if not self.getGroup(group):
+            self.createGroup(group, group)
         data = {"role": role, "group": {"fullName": fullName}}
-        r = self.post(url, data=data)
+        r = self.post(url, json=data)
         return r
 
     def getSiteContainers(self, siteId):
@@ -147,7 +189,32 @@ class AcsClient:
         return r and r['entry']
 
     ######################################
+    # bulk import API
+    def startBulkImport(self, sourceDir, targetPath):
+        url = self.urlbase + '/alfresco/s/bulkfsimport/initiate'
+        data = {"sourceDirectory": sourceDir, "targetPath":targetPath}
+        r = self.post(url, data=data)
+
+    def getBulkImportStatus(self):
+        url = self.urlbase + '/alfresco/s/bulkfsimport/status.xml'
+        r = self.get(url)
+        currentStatus = r.find('CurrentStatus')
+        resultOfLastExecution = r.find('ResultOfLastExecution')
+        return {"currentStatus": currentStatus.text, "lastResult":resultOfLastExecution.text}
+
+    ######################################
     # file plan APIs 
+    def getRmSite(self):
+        url = self.gs_api_prefix + '/gs-sites/rm'
+        r = self.get(url)
+        return r and r['entry']
+
+    def createRmSite(self, title='Records Management', description='Records Management Site', compliance='DOD5015'):
+        url = self.gs_api_prefix + '/gs-sites'
+        data = {"title": title, "description": description, "compliance":compliance}
+        r = self.post(url, json=data)
+        return r and r['entry']
+
     def getRootRecordCategories(self):
         url = self.gs_api_prefix + '/file-plans/-filePlan-/categories'
         r = self.get(url)
@@ -156,7 +223,7 @@ class AcsClient:
     def createRootRecordCategory(self, name): 
         url = self.gs_api_prefix + '/file-plans/-filePlan-/categories'
         data = {"name": name}
-        r = self.post(url, data=data)
+        r = self.post(url, json=data)
         return r and r['entry']
 
     def getRecordCategoriesAndFolders(self, parentId):
@@ -167,12 +234,11 @@ class AcsClient:
     def createRecordCategory(self, parentId, name): 
         url = self.gs_api_prefix + '/record-categories/' + parentId + '/children'
         data = {"name": name, "nodeType":"rma:recordCategory"}
-        r = self.post(url, data=data)
+        r = self.post(url, json=data)
         return r and r['entry']
 
     def createRecordFolder(self, parentId, name): 
         url = self.gs_api_prefix + '/record-categories/' + parentId + '/children'
         data = {"name": name, "nodeType":"rma:recordFolder"}
-        r = self.post(url, data=data)
+        r = self.post(url, json=data)
         return r and r['entry']
-
