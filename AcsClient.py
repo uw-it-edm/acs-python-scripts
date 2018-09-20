@@ -84,8 +84,6 @@ class AcsClient:
             if ex.response.status_code != requests.codes.conflict:
                 raise
             # else member alfready in group
-        except:
-            raise
 
         return r
 
