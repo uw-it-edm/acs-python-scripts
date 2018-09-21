@@ -7,44 +7,25 @@
 #
 # Python packages required:
 # * pip install boto3  (for connecting to S3 to empty S3 bucket)
-# * pip install mysql-connector-python (for connecting to DB to drop repository tables)
 # * pip install fabric (for running commands on repo and indexer servers remotely)
 #
 # Configuration files
 # * acs-refresh-dev.yml - repo and index hosts, admin group, import directories etc.
-# * acs.yml - ACS site configurations, used by acs.py
-# * rules.yml - rule configurations, used by acs.py
-# * filePlan.yml - file plan configurations, used by acs.py
-# * mysql.cnf - mysql configuration to connect to repo DB.
-#
-# Additional set up
-# * Tunnel to RDS and ACS repo
-#   ssh -L3306:dbhost:3306 -L8070:localhost:8070 acs_repo_host
-# where dbhost is the RDS cluster endpoint
-# * Add the following to /etc/hosts to work around SSL host verification
-#  127.0.0.1 <connonical name (CN) of repo certificate>
-# * sudo privilege is required on the repo and index hosts
 #
 # It takes several minutes to refresh the repo, without bulk import.
 # It takes about 3 minutes for the repo to start the first time.
 # The time for bulk import depends on the amount of data to be imported.
 
 import argparse
-import json
 import logging
-from os.path import isfile
-
-import yaml
 
 import sys 
 import time
 import boto3
 import getpass
-import mysql.connector
 from fabric import Connection, Config
 
-from AcsClient import AcsClient
-import acs
+import util
 
 #############################################
 def clear_indexes(connection):
@@ -54,41 +35,6 @@ def clear_indexes(connection):
     connection.sudo('rm -rf /var/solr/contentstore')
     connection.sudo('rm -rf /var/solr/data/alfrescoModels')
     logging.info('Deleted indexes')
-
-#############################################
-def create_sites():
-    logging.info('Creating sites')
-    client = acs.main()
-    logging.info('Created sites')
-    return client
-
-#############################################
-def delete_alfresco_tables(optionfile, group='dev'):
-    logging.info('Deleting Alfresco tables')
-    stmt = """SET FOREIGN_KEY_CHECKS = 0;
-               SET GROUP_CONCAT_MAX_LEN=32768;
-               SET @tables = NULL;
-               SELECT GROUP_CONCAT('`', table_name, '`') INTO @tables
-               FROM information_schema.tables
-               WHERE table_schema = 'acs';
-
-               SELECT IFNULL(@tables,'dummy') INTO @tables;
-               SET @tables = CONCAT('DROP TABLE IF EXISTS ', @tables);
-
-               PREPARE stmt FROM @tables;
-               EXECUTE stmt;
-               DEALLOCATE PREPARE stmt;
-               SET FOREIGN_KEY_CHECKS = 1;
-            """
-    cnx = None
-    try:
-        cnx = mysql.connector.connect(option_files=optionfile, option_groups=group)
-        cur = cnx.cursor()
-        cur.execute(stmt)
-    finally:
-        cnx and cnx.close()
-
-    logging.info('Deleted Alfresco tables')
 
 #############################################
 # empty S3 bucket
@@ -136,48 +82,6 @@ def stop_repo(connection):
     logging.info('Stopped ACS repo')
     
 #############################################
-def upload_content(acsClient, conf):
-    logging.info('Uploading content')
-
-    # get ACS client if necessary
-    if not acsClient:
-        # get commandline arguments
-        args = acs.getArgs()
-        acsConf = {}
-        if args.conf:
-            acsConf = acs.getConfig(args.conf, args.stage)
-
-        acsClient = acs.getAcsClient(args, acsConf)
-
-    # start bulk import
-    imports = conf and conf['bulkImport']
-    if imports:
-        for imp in imports:
-            sourceDirectoryBase = imp['sourceDirectoryBase']
-            sourceDirectories = imp['sourceDirectories']
-            targetPath = imp['targetPath']
-            for srcdir in sourceDirectories:
-                sourceDirectory = sourceDirectoryBase + '/' + srcdir
-                logging.info('Uploading content from ' + sourceDirectory + ' to ' + targetPath)
-                acsClient.startBulkImport(sourceDirectory, targetPath)
-
-                # alfresco allow one bulk import at a time, wait for bulk load to complete
-                status = acsClient.getBulkImportStatus()
-                while status['currentStatus'].lower() != 'idle':
-                    sys.stdout.write('.')
-                    sys.stdout.flush()
-                    time.sleep(1)
-                    status = acsClient.getBulkImportStatus()
-                print("")  # new line
-
-                if status['lastResult'].lower() == 'succeeded':
-                    logging.info('Uploaded content from ' + sourceDirectory + ' to ' + targetPath)
-                else:
-                    logging.info('Failed to upload content from ' + sourceDirectory + ' to ' + targetPath)
-
-    logging.info('Uploaded content')
-
-#############################################
 # confirm dev env
 def sanityCheck(conf):
     # check for s3 bucket name, host names to confirm dev env. 
@@ -199,14 +103,13 @@ def sanityCheck(conf):
 # main
 def main():
     # config logging
-    # TODO get log file and level from config file
     logging.basicConfig(format='%(asctime)s %(levelname)s:%(message)s', datefmt='%m/%d/%Y %H:%M:%S',
                         level=logging.INFO
                         )
-    logging.info('start')
+    logging.info('start ' + sys.argv[0])
 
     # load refresh config file - hardcode config file name for now 
-    conf = acs.getConfig('acs-refresh-dev.yml')
+    conf = util.getConfig('acs-refresh-dev.yml')
     sanityCheck(conf)
 
     bucketName = conf['s3bucket']
@@ -216,8 +119,6 @@ def main():
     if answer != 'yes':
         sys.exit()
 
-    acsClient = None
-
     sudoPass = getpass.getpass("What's your sudo password?")
     pwConfig = Config(overrides={'sudo': {'password': sudoPass}})
     repoHost = Connection(conf['repoHost'], config=pwConfig)
@@ -225,14 +126,14 @@ def main():
     stop_indexer(indexerHost)
     clear_indexes(indexerHost)
     stop_repo(repoHost)
-    delete_alfresco_tables('mysql.cnf', 'dev')
+    repoHost.run('cd /data/acs/python-scripts; python acs-drop-acs-tables.py DROP-ACS-TABLES')
     empty_s3_bucket(bucketName)
     start_repo(repoHost)
     start_indexer(indexerHost)
-    acsClient = create_sites()
-    upload_content(acsClient, conf)
+    repoHost.run('cd /data/acs/python-scripts; python acs.py')
+    repoHost.run('cd /data/acs/python-scripts; python acs-bulk-import.py')
 
-    logging.info('end')
+    logging.info('end ' + sys.argv[0])
 
 #############################################
 if __name__ == "__main__":

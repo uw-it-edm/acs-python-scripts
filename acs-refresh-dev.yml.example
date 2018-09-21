@@ -3,10 +3,3 @@ default:
   s3bucket: acs-dev
   repoHost: 10.1.1.1
   indexerHost: 10.1.1.2
-  bulkImport:
-    - sourceDirectoryBase: /data/acs-import/dev/site1
-      sourceDirectories: ["test"] 
-      targetPath: /Sites/site1/documentLibrary
-    - sourceDirectoryBase: /data/acs-import/dev/site2
-      sourceDirectories: ["test"] 
-      targetPath: /Sites/site1/documentLibrary

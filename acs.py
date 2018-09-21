@@ -1,14 +1,14 @@
 #!/usr/bin/python
 
 import argparse
-import json
 import logging
 from os.path import isfile
+import sys
 
 import yaml
 
 from AcsClient import AcsClient
-
+import util
 
 #############################################
 # get commandline arguments
@@ -23,26 +23,6 @@ def getArgs():
     parser.add_argument('-u', '--user', default='admin', help='username')
     parser.add_argument('--url', help='urlbase, e.g. http://localhost:8080')
     return parser.parse_args()
-
-
-#############################################
-# load conf file (yml)
-def getConfig(filename, stage='dev'):
-    # sanity check
-    if not filename:
-        return None
-
-    ret = None
-    with open(filename, 'r') as file:
-        conf = yaml.load(file)
-        ret = conf
-        if conf['default']:
-            ret = conf['default']
-            if stage and stage in conf:  # override default
-                for key in conf[stage]:
-                    ret[key] = conf[stage][key]
-
-    return ret;
 
 
 #############################################
@@ -224,13 +204,11 @@ def main():
     logging.basicConfig(format='%(asctime)s %(levelname)s:%(message)s', datefmt='%m/%d/%Y %H:%M:%S',
                         level=logging.INFO
                         )
-    logging.info('start')
+    logging.info('start ' + sys.argv[0])
 
     # get commandline arguments
     args = getArgs()
-    conf = {}
-    if args.conf:
-        conf = getConfig(args.conf, args.stage)
+    conf = util.getConfig(args.conf, args.stage)
 
     # get ACS client
     acs = getAcsClient(args, conf)
@@ -268,7 +246,7 @@ def main():
     if filePlan:
         createOrUpdateFilePlan(acs, filePlan)
 
-    logging.info('end')
+    logging.info('end ' + sys.argv[0])
 
     return acs
 

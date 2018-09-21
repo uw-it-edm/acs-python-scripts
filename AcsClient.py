@@ -1,5 +1,6 @@
 import requests
 from xml.etree import ElementTree
+import util
 
 ######################################
 # convenience (module) functions
@@ -19,6 +20,18 @@ class AcsClient:
         self.user = user
         self.pw = pw
         self.auth = (user, pw)
+
+    @classmethod
+    def fromConfig(cls, filename=None, stage='dev'):
+        conf = util.getConfig(filename, stage)
+        user = conf and conf['user']
+        pw = conf and conf['password']
+        urlbase = conf and (conf['url'] or conf['urlbase'])
+
+        if user and pw and urlbase:
+            return cls(urlbase, user, pw)
+        else:
+            return None
 
     ######################################
     # get, post and put
