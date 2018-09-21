@@ -1,3 +1,5 @@
 pyyaml
 responses
 requests
+boto3
+fabric
