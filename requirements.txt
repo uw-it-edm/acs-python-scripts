@@ -3,3 +3,4 @@ responses
 requests
 boto3
 fabric
+mysql-connector-python
