@@ -1,5 +1,0 @@
-# config for acs-refresh-dev.py
-default:
-  s3bucket: acs-dev
-  repoHost: 10.1.1.1
-  indexerHost: 10.1.1.2
