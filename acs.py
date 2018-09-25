@@ -15,7 +15,7 @@ import util
 def getArgs():
     parser = argparse.ArgumentParser()
     parser.add_argument('-c', '--conf', default='acs.yml', help='conf file')
-    parser.add_argument('-f', '--filePlan', help='file plan', default='filePlan.yml')
+    parser.add_argument('-f', '--filePlan', help='records management file plan definition', default='filePlan.yml')
     parser.add_argument('-r', '--rules', help='rules config file', default='rules.yml')
     parser.add_argument('-s', '--stage', choices=['dev', 'local', 'test', 'prod'], default='dev',
                         help='stage')
