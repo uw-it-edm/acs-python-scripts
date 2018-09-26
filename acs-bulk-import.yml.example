@@ -1,0 +1,8 @@
+# config for acs-refresh-dev.py
+default:
+  - sourceDirectoryBase: /data/acs-import/dev/site1
+    sourceDirectories: ["test"] 
+    targetPath: /Sites/site1/documentLibrary
+  - sourceDirectoryBase: /data/acs-import/dev/site2
+    sourceDirectories: ["test"] 
+    targetPath: /Sites/site1/documentLibrary

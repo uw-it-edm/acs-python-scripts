@@ -1,20 +1,21 @@
-#!/usr/bin/python
+#!/usr/bin/python2.7
 
 import argparse
-import json
 import logging
 from os.path import isfile
+import sys
 
 import yaml
 
 from AcsClient import AcsClient
-
+import util
 
 #############################################
 # get commandline arguments
 def getArgs():
     parser = argparse.ArgumentParser()
     parser.add_argument('-c', '--conf', default='acs.yml', help='conf file')
+    parser.add_argument('-f', '--filePlan', help='records management file plan definition', default='filePlan.yml')
     parser.add_argument('-r', '--rules', help='rules config file', default='rules.yml')
     parser.add_argument('-s', '--stage', choices=['dev', 'local', 'test', 'prod'], default='dev',
                         help='stage')
@@ -25,37 +26,17 @@ def getArgs():
 
 
 #############################################
-# load conf file (yml)
-def getConfig(filename, stage='dev'):
-    # sanity check
-    if not filename:
-        return None
-
-    ret = None
-    with open(filename, 'r') as file:
-        conf = yaml.load(file)
-        ret = conf
-        if conf['default']:
-            ret = conf['default']
-            if stage and stage in conf:  # override default
-                for key in conf[stage]:
-                    ret[key] = conf[stage][key]
-
-    return ret;
-
-
-#############################################
 # load rules conf file (yml)
-def load_rules_config(file_name):
+def load_yml_file(file_name):
     # sanity check
     if not file_name or not isfile(file_name):
         return None
 
-    rules = {}
+    ret = {}
     with open(file_name, 'r') as file:
-        rules = yaml.load(file)
+        ret = yaml.load(file)
 
-    return rules
+    return ret
 
 
 #############################################
@@ -79,7 +60,7 @@ def createOrUpdateFolderRule(acs, folderPath, rule):
         return
 
     folderId = folderNode['id']
-        
+
     existingRules = acs.getRules(folderId)
     existingRuleIds = {rule['title']:rule['id'] for rule in existingRules}
     title = rule['title']
@@ -113,28 +94,107 @@ def createOrUpdateSite(acs, site):
         return
 
     # create site if it does not exist
-    s = acs.getSite(site['id'])
+    siteId = site['id']
+    s = acs.getSite(siteId)
     if s:
-        logging.info('site ' + site['id'] + ' already exists.')
+        logging.info('site ' + siteId + ' already exists.')
     else:
-        logging.info('create site ' + site['id'])
-        acs.createSite(site['id'], site['title'], site['description']);
+        logging.info('create site ' + siteId)
+        s = acs.createSite(siteId, site['title'], site['description']);
 
     # add group roles to site
     roles = site['roles'] if 'roles' in site else []
     for r in roles:
         if 'role' in r and 'group' in r:
-            g = acs.getSiteGroup(site['id'], r['group'])
+            g = acs.getSiteGroup(siteId, r['group'])
             if g and 'role' in g and g['role'] == r['role']:
                 logging.info(
                     'group ' + r['group'] + ' with role ' + r['role'] + ' already exists on site ' +
-                    site['id'])
+                    siteId)
             else:
                 logging.info(
-                    'add group ' + r['group'] + ' with role ' + r['role'] + ' to site ' + site[
-                        'id'])
-                acs.addSiteGroup(site['id'], r['group'], r['role'])
+                    'add group ' + r['group'] + ' with role ' + r['role'] + ' to site ' + siteId)
+                acs.addSiteGroup(siteId, r['group'], r['role'])
 
+    # create folders
+    folders = site['folders'] if 'folders' in site else []
+    for folder in folders:
+        folderName = folder['name']
+        folderObj = acs.getNodeByPath(siteId + '/documentLibrary/' + folderName)
+        if (folderObj):
+            logging.info('folder ' + folderName + ' already exists')
+        else:
+            docLib = acs.getDocumentLibrary(s['id'])
+            acs.createFolder(docLib['id'], folderName);
+            logging.info('creating folder ' + folderName + ' in ' + siteId)
+
+#############################################
+# createOrUpdate category
+def createOrUpdateChildCategories(acs, parentId, children):
+
+    existingChildren = acs.getRecordCategoriesAndFolders(parentId)
+    existingChildrenMap = {c['entry']['name']:{'id':c['entry']['id'], 'nodeType': c['entry']['nodeType']} for c in existingChildren}
+
+    for child in children:
+        if child['name'] in existingChildrenMap:
+            logging.info('Category ' + child['name'] + ' already exists.')
+            childCategory = existingChildrenMap[child['name']]
+        elif 'nodeType' in child and child['nodeType']=='recordFolder':
+            logging.info('Creating folder ' + child['name'])
+            childCategory = acs.createRecordFolder(parentId, child['name'])
+        else:
+            logging.info('Creating category ' + child['name'])
+            childCategory = acs.createRecordCategory(parentId, child['name'])
+
+        if 'children' in child and ('nodeType' not in child or child['nodeType'] != 'recordFolder'):
+            createOrUpdateChildCategories(acs, childCategory['id'], child['children'])  # recursive call
+
+#############################################
+# process file plan
+def createOrUpdateFilePlan(acs, filePlan):
+
+    if not filePlan:
+        return
+
+    # create RM site if necessary
+    siteId = 'rm'
+    if acs.getRmSite():
+        logging.info('RM site already exists')
+    else:
+        logging.info('creating RM site')
+        acs.createRmSite(filePlan['title'], filePlan['description'], filePlan['compliance'])
+
+    # add site role
+    roles = filePlan['roles'] if 'roles' in filePlan else []
+    for r in roles:
+        if 'role' in r and 'group' in r:
+            g = acs.getSiteGroup(siteId, r['group'])
+            if g and 'role' in g and g['role'] == r['role']:
+                logging.info(
+                    'group ' + r['group'] + ' with role ' + r['role'] + ' already exists on site ' +
+                    siteId)
+            else:
+                logging.info('add group ' + r['group'] + ' with role ' + r['role'] + ' to site ' + siteId)
+                acs.addSiteGroup(siteId, r['group'], r['role'])
+
+    # add categories and folders
+    rootCategories = acs.getRootRecordCategories()
+    rootCategoriesMap = {}
+    if rootCategories:
+        rootCategoriesMap = {c['entry']['name']:{'id':c['entry']['id'], 'nodeType': c['entry']['nodeType']} for c in rootCategories}
+
+    if filePlan and filePlan['categories']:
+        for rc in filePlan['categories']:
+            category = None
+            if rc['name'] in rootCategoriesMap:
+                category = rootCategoriesMap[rc['name']]
+                logging.info('Root category ' + rc['name'] + ' already exists.')
+            else:
+                logging.info('Creating root category ' + rc['name'])
+                category = acs.createRootRecordCategory(rc['name'])
+
+            if 'children' in rc:
+                createOrUpdateChildCategories(acs, category['id'], rc['children']);
 
 #############################################
 # main
@@ -144,33 +204,51 @@ def main():
     logging.basicConfig(format='%(asctime)s %(levelname)s:%(message)s', datefmt='%m/%d/%Y %H:%M:%S',
                         level=logging.INFO
                         )
-    logging.info('start')
+    logging.info('start ' + sys.argv[0])
 
     # get commandline arguments
     args = getArgs()
-    conf = {}
-    if args.conf:
-        conf = getConfig(args.conf, args.stage)
-
-    rules = None
-    if args.rules:
-        rules = load_rules_config(args.rules)
+    conf = util.getConfig(args.conf, args.stage)
 
     # get ACS client
     acs = getAcsClient(args, conf)
+
+    # create root group if it does not exist
+    if conf and conf['rootGroup']:
+        if not acs.getGroup(conf['rootGroup']):
+            acs.createRootGroup(conf['rootGroup'], conf['rootGroup'])
+
+    if conf and conf['adminGroup']:
+        adminGroup = conf['adminGroup'] if conf['adminGroup'].startswith('GROUP_') else 'GROUP_' + conf['adminGroup']
+        if not acs.getGroup(adminGroup):
+            acs.createGroup(adminGroup, adminGroup)
+        acs.addGroupMember('ALFRESCO_ADMINISTRATORS', adminGroup)
 
     # create and update sites
     if conf and conf['sites']:
         for site in conf['sites']:
             createOrUpdateSite(acs, site);
-            site_id = site['id']
 
     # create and update rules
+    rules = None
+    if args.rules:
+        rules = load_yml_file(args.rules)
+
     if rules:
         for rule in rules:
             createOrUpdateRule(acs, rule);
 
-    logging.info('end')
+    # file plan
+    filePlan = None
+    if args.filePlan:
+        filePlan = load_yml_file(args.filePlan)
+
+    if filePlan:
+        createOrUpdateFilePlan(acs, filePlan)
+
+    logging.info('end ' + sys.argv[0])
+
+    return acs
 
 #############################################
 if __name__ == "__main__":

@@ -2,7 +2,10 @@
 *.pyc
 *.yaml
 *.yml
+*.cnf
 
 export-*.csv
 
 !/.travis.yml
+
+venv
