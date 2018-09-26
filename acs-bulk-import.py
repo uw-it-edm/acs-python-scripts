@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python2.7
 # start bulk import, monitor status, and wait for import to complete.
 # acs-bulk-import.yml - define import directory and target path
 # The time for bulk import depends on the amount of data to be imported.
@@ -58,7 +58,7 @@ def main():
     args = getArgs()
     acsClient = AcsClient.fromConfig(args.conf, args.stage)
 
-    # load refresh config file - hardcode config file name for now 
+    # load bulk import config file
     biconf = util.getConfig(args.biconf)
 
     startBulkImport(acsClient, biconf)

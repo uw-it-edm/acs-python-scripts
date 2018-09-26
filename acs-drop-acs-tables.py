@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python2.7
 # drop ACS tables.
 # WARNING: DROP ACS Tables.
 #
