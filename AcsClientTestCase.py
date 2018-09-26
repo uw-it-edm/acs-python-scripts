@@ -71,6 +71,10 @@ class AcsClientTestCase(unittest.TestCase):
 
         responses.add(responses.POST, url, json=json, status=200)
 
+        url = 'http://localhost:8080/alfresco/api/-default-/public/alfresco/versions/1/groups/GROUP_test_group'
+        json = {'entry': {'fullName': 'GROUP_test_group', 'id': 'test_group'}} 
+        responses.add(responses.GET, url, json=json, status=200)
+
         ret = self.acsClient.addSiteGroup('mysite', 'test_group', 'SiteConsumer')
         self.assertTrue(ret)
         self.assertEqual(ret['role'], 'SiteConsumer')
