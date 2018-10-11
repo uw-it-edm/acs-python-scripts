@@ -2,10 +2,25 @@ default:
   user: <admin user name e.g. 'admin'>
   password: <admin user password>
   url: <Alfresco Repository URL, e.g. 'https://localhost:8080'>
+  rootGroup: my_root_group
+  adminGroup: my_admin_group
   sites:
     - id: testsite
       title: Test Site
       description:  Test Site
+      folders:
+        - name: folder1
+          roles:
+            - role: Consumer
+              group: consumer-group-1
+            - role: Coordinator
+              group: coordinator-group-1
+        - name: folder2
+          roles:
+            - role: Consumer
+              group: consumer-group-2
+            - role: Collaborator
+              group: collaborator-group-2
       roles:
         - role: SiteConsumer
           group: <group name with readonly access>
