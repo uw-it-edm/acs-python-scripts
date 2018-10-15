@@ -85,6 +85,27 @@ def createOrUpdateRule(acs, rule):
         createOrUpdateFolderRule(acs, folder, rule['rule'])
 
 #############################################
+# set folder permissions
+def setFolderPermissions(acs, folderId, folderRoles):
+    if not folderRoles:
+        return
+
+    locallySet = []
+    for r in folderRoles:
+        if 'role' in r and 'group' in r:
+            g = r['group']
+            if not acs.getGroup(g):
+                acs.createGroup(g, g)
+            locallySet.append({ "authorityId": g if g.startswith('GROUP_') else 'GROUP_' + g,
+                                "name": r['role'],
+                                "accessStatus": "ALLOWED"
+                              })
+
+    if len(locallySet) > 0:
+        permissions = { "isInheritanceEnabled": "false", "locallySet":locallySet }
+        acs.setPermissions(folderId, permissions)
+
+#############################################
 # create and update sites
 # TODO handle site update
 def createOrUpdateSite(acs, site):
@@ -125,8 +146,11 @@ def createOrUpdateSite(acs, site):
             logging.info('folder ' + folderName + ' already exists')
         else:
             docLib = acs.getDocumentLibrary(s['id'])
-            acs.createFolder(docLib['id'], folderName);
+            folderObj = acs.createFolder(docLib['id'], folderName);
             logging.info('creating folder ' + folderName + ' in ' + siteId)
+
+        if 'roles' in folder:
+            setFolderPermissions(acs, folderObj['id'], folder['roles'])
 
 #############################################
 # createOrUpdate category
