@@ -4,6 +4,7 @@ import argparse
 import csv
 import logging
 import os
+import sys
 import time
 from datetime import datetime
 from xml.dom import minidom
@@ -45,9 +46,10 @@ class ContentModelDefinition:
 class WebcenterData:
     BL_DATE_FORMAT = "%Y-%m-%d %H:%M:%S.%f"
 
-    def __init__(self, content_model_definition, number_of_data_rows, number_of_fields,
+    def __init__(self, content_model_definition, basedir,  number_of_data_rows, number_of_fields,
                  bl_field_types):
         self.content_model_definition = content_model_definition
+        self.basedir = basedir
         self.number_of_data_rows = int(number_of_data_rows)
         self.number_of_fields = int(number_of_fields)
         self.data_rows = []
@@ -96,6 +98,11 @@ class HdaParser:
         else:
             logging.info("Processing " + str(number_to_process) + "documents from file: " + input)
 
+        # primary_file in hda files uses relative path. Need to prepend basedir, which
+        # is the grand parent of the hda file
+        path_parts = input.split('/')
+        basedir = '/'.join(path_parts[:-2])
+        batchId = path_parts[-2]
         with open(input, 'r') as f:
             # File metadata
             while True:
@@ -109,13 +116,14 @@ class HdaParser:
 
             if not process_all_documents:
                 self.number_of_rows = number_to_process
-            wcc_data = WebcenterData(self.content_model_definition, self.number_of_rows,
+            wcc_data = WebcenterData(self.content_model_definition, basedir, self.number_of_rows,
                                      num_of_fields, self.bl_field_types)
 
             # Field Names
             for i in range(0, wcc_data.number_of_fields):
                 line = f.readline()
                 wcc_data.add_field(line)
+            wcc_data.field_names.append('wccArchiverBatchId')
 
             # metadata
             for n in range(0, self.number_of_rows):
@@ -123,6 +131,7 @@ class HdaParser:
                 for j in range(0, wcc_data.number_of_fields):
                     line = f.readline()
                     data_row.append(line.rstrip())
+                data_row.append(batchId)
                 wcc_data.add_data_row(data_row)
 
             if process_all_documents:
@@ -152,10 +161,11 @@ class HdaParser:
 
 
 class WccXmlWriter:
-    def __init__(self, wcc_data, should_validate_field_value):
+    def __init__(self, wcc_data, should_validate_field_value, sample_files):
         self.wcc_data = wcc_data
         self.primary_file_field_index = self.wcc_data.field_names.index('primaryFile')
         self.should_validate_field_value = should_validate_field_value
+        self.sample_files = sample_files
 
     def write_xml_files(self, output, print_to_screen):
         logging.info('writing xml to: ' + output)
@@ -164,8 +174,19 @@ class WccXmlWriter:
             try:
                 xml_doc = self.__create_xml(i)
                 primary_file_name = self.__get_primary_file_name(i)
+                file_ext = self.__get_primary_file_ext(i)
                 self.__print_xml_to_screen(xml_doc, print_to_screen)
-                self.__write_xml_file(xml_doc, primary_file_name, output)
+                if self.sample_files:
+                    if self.sample_files.get(file_ext, i):
+                        self.__write_xml_file(xml_doc, primary_file_name, output)
+                        self.__link_content_file(primary_file_name, file_ext, output, i)
+                    else:
+                        print "missing ext " + file_ext + " in sample files"
+                else:
+                    primary_file = self.wcc_data.data_rows[i][self.primary_file_field_index]
+                    self.__write_xml_file(xml_doc, primary_file_name, output)
+                    self.__link_content_file(primary_file_name, file_ext, output, i)
+
             except InvalidDocument as error:
                 #if there is an invalid document, don't write the file and just return an error message
                 logging.error(error.get_error_message())
@@ -174,6 +195,24 @@ class WccXmlWriter:
         primary_file = self.wcc_data.data_rows[document_index][self.primary_file_field_index]
         primary_file_name = os.path.basename(primary_file)
         return primary_file_name
+
+    def __get_primary_file_ext(self, document_index):
+        file_ext = ''
+        primary_file_name = self.__get_primary_file_name(document_index)
+        file_name_parts = os.path.splitext(primary_file_name)
+        if len(file_name_parts) >= 2:
+           file_ext = file_name_parts[1]
+
+        return file_ext
+
+    def __link_content_file(self, primary_file_name, file_ext, xml_file_output_dir, idx=0):
+        primary_file = self.wcc_data.basedir + '/' + self.wcc_data.data_rows[idx][self.primary_file_field_index]
+        srcfile = self.sample_files.get(file_ext, idx) if self.sample_files else primary_file
+        dest = xml_file_output_dir + '/' + primary_file_name
+        if not os.path.exists(dest):
+            #os.symlink(srcfile, dest) # this one does not work with '\@' in source path
+            os.system('ln -s ' + srcfile + ' ' +  dest)  # this one works
+        #sys.exit()
 
     def __write_xml_file(self, xml_doc, primary_file_name, xml_file_output_dir):
         def append_doc_type(xml_file):  # ElemenTree is unable to add DOCTYPE
@@ -194,7 +233,8 @@ class WccXmlWriter:
         xml_file = os.path.join(xml_file_output_dir, xml_file_name)
         logging.debug('writing to xml: ' + xml_file)
 
-        ElementTree.ElementTree(xml_doc).write(xml_file, encoding='UTF-8', xml_declaration=True)
+        #ElementTree.ElementTree(xml_doc).write(xml_file, encoding='UTF-8', xml_declaration=True)
+        ElementTree.ElementTree(xml_doc).write(xml_file, encoding='UTF-8')
         append_doc_type(xml_file)
 
     def __print_xml_to_screen(self, xml_doc, print_to_screen):
@@ -213,9 +253,11 @@ class WccXmlWriter:
                 child.text = aspects
 
         def add_fields(document):
+            primary_file_name = self.__get_primary_file_name(document_index)
+            file_ext = os.path.splitext(primary_file_name)[1]
             for field in self.wcc_data.content_model_definition.fields:
                 source_field = field['source_field']
-                field_type = field['type']
+                field_type = field['type'] if 'type' in field else 'text'
                 field_name = field['name']
                 field_index = self.wcc_data.field_names.index(source_field)
                 field_value = self.wcc_data.data_rows[document_index][field_index]
@@ -226,10 +268,13 @@ class WccXmlWriter:
                 if field_type == 'date' and field_value != '':
                     field_value = field_value.isoformat()
 
+                if field_name == 'cm:name' and field_value.find('.') < 0:
+                    field_value += file_ext
+
                 if (field_type == 'date' or field_type == 'int') and field_value == '':
                     pass  # Don't write date or int fields if they don't have values
                 else:
-                    key = field['prefix'] + ':' + field['name']
+                    key = field['name']
                     child = SubElement(document, 'entry', {'key': key})
                     child.text = field_value
 
@@ -267,7 +312,7 @@ class WccXmlWriter:
 class HdaTranslator:
     def __init__(self, content_model_definition_file, content_model_profile, csv_file,
                  hda_input_file, number_of_docs_to_process, print_to_screen, xml_output_directory,
-                 should_validate_field_value):
+                 should_validate_field_value, sample_files=None):
         self.content_model_definition_file = content_model_definition_file
         self.content_model_profile = content_model_profile
         self.csv_file = csv_file
@@ -276,6 +321,7 @@ class HdaTranslator:
         self.print_to_screen = print_to_screen
         self.xml_output_directory = xml_output_directory
         self.should_validate_field_value = should_validate_field_value
+        self.sample_files = sample_files
 
     def run(self):
         # Load Content Model
@@ -295,20 +341,51 @@ class HdaTranslator:
             wcc_data.write_csv(self.csv_file)
 
         if self.xml_output_directory:
-            wcc_xml_writer = WccXmlWriter(wcc_data, self.should_validate_field_value)
+            wcc_xml_writer = WccXmlWriter(wcc_data, self.should_validate_field_value, self.sample_files)
             wcc_xml_writer.write_xml_files(self.xml_output_directory, self.print_to_screen)
+
+    # derive wcc field name from from acs field name, if wcc field name is not specified 
+    def __get_fields(self, rawfields):
+        processed_fields = []
+        for f in rawfields:
+            if not 'source_field' in f:
+                # derive source_field name
+                field_name = f['name']
+                idx = field_name.find(':')
+                if idx >= 0:
+                    field_name = f['name'][idx+1:]
+                if field_name.endswith('Id'):
+                    name_len = len(field_name)
+                    field_name = field_name[:name_len-1] + 'D'
+                f['source_field'] = 'xuw' + field_name[0].upper() + field_name[1:]
+            processed_fields.append(f)
+        return processed_fields
 
     def __load_content_model(self, file_name, profile_name):
         content_model_definition = None
         with open(file_name, 'r') as file:
             content_model_yml = yaml.load(file)
+
+            # common section
+            common_section = content_model_yml['common']
+            common_aspects = common_section['aspects']
+            common_fields = self.__get_fields(common_section['fields'])
+            record_fields = self.__get_fields(common_section['record_fields'])
+
             content_models = content_model_yml['content_models']
             for content_model in content_models:
                 profile = content_model['profile']
                 if profile_name == profile:
                     content_type = content_model['content_type']
-                    fields = [field for field in content_model['fields']]
-                    aspects = content_model['aspects']
+                    fields = self.__get_fields(content_model['fields'])
+                    fields.extend(common_fields)
+                    aspects = common_aspects
+                    if 'aspects' in content_model:
+                        aspects.extend(content_model['aspects'])
+
+                    if 'uw:record' in aspects:
+                        fields.extend(record_fields)
+
                     content_model_definition = ContentModelDefinition(profile, fields, aspects,
                                                                       content_type)
 
