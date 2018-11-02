@@ -4,7 +4,6 @@ import argparse
 import csv
 import logging
 import os
-import sys
 import time
 from datetime import datetime
 from xml.dom import minidom
@@ -210,9 +209,7 @@ class WccXmlWriter:
         srcfile = self.sample_files.get(file_ext, idx) if self.sample_files else primary_file
         dest = xml_file_output_dir + '/' + primary_file_name
         if not os.path.exists(dest):
-            #os.symlink(srcfile, dest) # this one does not work with '\@' in source path
             os.system('ln -s ' + srcfile + ' ' +  dest)  # this one works
-        #sys.exit()
 
     def __write_xml_file(self, xml_doc, primary_file_name, xml_file_output_dir):
         def append_doc_type(xml_file):  # ElemenTree is unable to add DOCTYPE
