@@ -14,6 +14,9 @@ import yaml
 
 import util
 
+# script version and run time
+__version__ = '1.0'
+scriptVersionAndRunTime = __version__ + ' ' + str(datetime.now())
 
 class InvalidDocument(Exception):
     def __init__(self,field_name, field_type, field_value, document_id):
@@ -100,7 +103,7 @@ class HdaParser:
         # primary_file in hda files uses relative path. Need to prepend basedir, which
         # is the grand parent of the hda file
         path_parts = input.split('/')
-        basedir = '/'.join(path_parts[:-2])
+        basedir = os.path.join(os.sep, *path_parts[:-2])
         batchId = path_parts[-2]
         with open(input, 'r') as f:
             # File metadata
@@ -123,6 +126,7 @@ class HdaParser:
                 line = f.readline()
                 wcc_data.add_field(line)
             wcc_data.field_names.append('wccArchiverBatchId')
+            wcc_data.field_names.append('scriptVersionAndRunTime')
 
             # metadata
             for n in range(0, self.number_of_rows):
@@ -131,6 +135,7 @@ class HdaParser:
                     line = f.readline()
                     data_row.append(line.rstrip())
                 data_row.append(batchId)
+                data_row.append(scriptVersionAndRunTime)
                 wcc_data.add_data_row(data_row)
 
             if process_all_documents:
@@ -180,7 +185,7 @@ class WccXmlWriter:
                         self.__write_xml_file(xml_doc, primary_file_name, output)
                         self.__link_content_file(primary_file_name, file_ext, output, i)
                     else:
-                        print "missing ext " + file_ext + " in sample files"
+                        logging.warning("missing ext " + file_ext + " in sample files")
                 else:
                     primary_file = self.wcc_data.data_rows[i][self.primary_file_field_index]
                     self.__write_xml_file(xml_doc, primary_file_name, output)
@@ -205,11 +210,11 @@ class WccXmlWriter:
         return file_ext
 
     def __link_content_file(self, primary_file_name, file_ext, xml_file_output_dir, idx=0):
-        primary_file = self.wcc_data.basedir + '/' + self.wcc_data.data_rows[idx][self.primary_file_field_index]
+        primary_file = os.path.join(self.wcc_data.basedir, self.wcc_data.data_rows[idx][self.primary_file_field_index])
         srcfile = self.sample_files.get(file_ext, idx) if self.sample_files else primary_file
-        dest = xml_file_output_dir + '/' + primary_file_name
+        dest = os.path.join(xml_file_output_dir, primary_file_name)
         if not os.path.exists(dest):
-            os.system('ln -s ' + srcfile + ' ' +  dest)  # this one works
+            os.system('ln -s ' + srcfile + ' ' +  dest)  # os.symlink does not work with '@' in path
 
     def __write_xml_file(self, xml_doc, primary_file_name, xml_file_output_dir):
         def append_doc_type(xml_file):  # ElemenTree is unable to add DOCTYPE
@@ -230,7 +235,7 @@ class WccXmlWriter:
         xml_file = os.path.join(xml_file_output_dir, xml_file_name)
         logging.debug('writing to xml: ' + xml_file)
 
-        #ElementTree.ElementTree(xml_doc).write(xml_file, encoding='UTF-8', xml_declaration=True)
+        # xml_declaration=True is not supported by python 2.6.6 on uwctprod01
         ElementTree.ElementTree(xml_doc).write(xml_file, encoding='UTF-8')
         append_doc_type(xml_file)
 
