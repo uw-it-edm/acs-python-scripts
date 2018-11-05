@@ -1,24 +1,35 @@
-content_models:
-  - profile: 'PROFILE_1'
-    content_type: 'customPrefix:PROFILE_1'
+common:
     aspects:
       - 'cm:author'
       - 'cm:versionable'
     fields:
-      - name: 'alfresco_field_1'
-        prefix: 'cm'
+      - name: 'cm:modified'
+        source_field: 'hdaLastModifiedDate'
+        type: 'date'
+      - name: 'cm:name'
+        source_field: 'hdaName'
+      - name: 'cm:title'
+        source_field: 'hdaTitle'
+
+   record_fields:
+      - name: 'my:categoryId'
+        source_field: 'hdaCategoryID'
+      - name: 'my:recordGroup'
+      - name: 'my:recordSeries'
+
+content_models:
+  - profile: 'PROFILE_1'
+    content_type: 'customPrefix:PROFILE_1'
+    fields:
+      - name: 'cm:alfresco_field_1'
         source_field: 'hdaFieldName'
-        type: 'text'
-      - name: 'alfresco_field_2'
-        prefix: 'customPrefix'
+      - name: 'customPrefix:alfresco_field_2'
         source_field: 'hdaFieldName_2'
         type: 'date'
   - profile: 'PROFILE_2'
     content_type: 'customPrefix2:PROFILE_2'
     aspects:
-      - 'cm:author'
+      - 'rm:record'
     fields:
-      - name: 'alfresco_field_1'
-        prefix: 'customPrefix2'
+      - name: 'customPrefix2:alfresco_field_1'
         source_field: 'aDifferentName'
-        type: 'text'
