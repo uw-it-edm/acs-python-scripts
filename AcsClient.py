@@ -201,9 +201,9 @@ class AcsClient:
 
     ######################################
     # bulk import API
-    def startBulkImport(self, sourceDir, targetPath):
+    def startBulkImport(self, sourceDir, targetPath, batchSize=20, numThreads=10, existingFileMode='REPLACE'):
         url = self.urlbase + '/alfresco/s/bulkfsimport/initiate'
-        data = {"sourceDirectory": sourceDir, "targetPath":targetPath}
+        data = {"sourceDirectory": sourceDir, "targetPath":targetPath, "batchSize":batchSize, "numThreads": numThreads, "existingFileMode":existingFileMode}
         r = self._post(url, data=data)
 
     def getBulkImportStatus(self):
