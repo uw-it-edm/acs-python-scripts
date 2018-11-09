@@ -102,10 +102,6 @@ class HdaParser:
 
     def parse_metadata(self, input, number_to_process):
         process_all_documents = (number_to_process is None)
-        #if process_all_documents:
-        #    logging.info("  Processing all documents from file: " + input)
-        #else:
-        #    logging.info("  Processing " + str(number_to_process) + "documents from file: " + input)
 
         # primary_file in hda files uses relative path. Need to prepend basedir, which
         # is the grand parent of the hda file
