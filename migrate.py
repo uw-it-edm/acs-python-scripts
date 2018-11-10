@@ -2,7 +2,7 @@
 #
 # example:
 # ./migrate.py -pMyProfile -i/var/data/archives/test/18-oct-30_09.28.23_669_07 -o/myhomedir/data/test-data -s/myhomedir/sample-files
-# 
+#
 
 
 import argparse
@@ -18,6 +18,8 @@ from xml.etree.ElementTree import Element, SubElement
 import yaml
 
 import util
+
+import cPickle as pickle
 
 # script version and run time
 __version__ = '1.0'
@@ -52,6 +54,26 @@ class ContentModelDefinition:
         self.aspects = aspects
         self.content_type = content_type
 
+
+class SampleFiles:
+    def __init__(self, dirpath):
+        self.ext_to_path = {}
+        for f in os.listdir(dirpath):
+            path_parts = os.path.splitext(f)
+            if len(path_parts) >= 2:
+                ext = path_parts[-1]
+                fullpath = dirpath+'/'+f
+                if ext in self.ext_to_path:
+                    self.ext_to_path[ext].append(fullpath)
+                else:
+                    self.ext_to_path[ext] = [fullpath]
+
+    def get(self, ext, idx=0):
+        if ext in self.ext_to_path:
+            l = len(self.ext_to_path[ext])
+            return self.ext_to_path[ext][idx % l]
+        else:
+            return None
 
 class WebcenterData:
     BL_DATE_FORMAT = "%Y-%m-%d %H:%M:%S.%f"
@@ -279,7 +301,7 @@ class WccXmlWriter:
                     if field_value in name_field_value_count:
                         file_name_parts = os.path.splitext(field_value)
                         name_field_value_count[field_value] += 1
-                        field_value = file_name_parts[0] + '(' + str(name_field_value_count[field_value] - 1) + ')' + file_name_parts[-1] 
+                        field_value = file_name_parts[0] + '(' + str(name_field_value_count[field_value] - 1) + ')' + file_name_parts[-1]
                     else:
                         name_field_value_count[field_value] = 1
 
@@ -324,7 +346,7 @@ class WccXmlWriter:
 class HdaTranslator:
     def __init__(self, content_model_definition_file, content_model_profile, csv_file,
                  wcc_archives_input_dir, number_of_docs_to_process, print_to_screen, output_directory,
-                 should_validate_field_value, sample_files=None):
+                 should_validate_field_value, seq1, seq2, countFile, sample_files_dir=None):
         self.content_model_definition_file = content_model_definition_file
         self.content_model_profile = content_model_profile
         self.csv_file = csv_file
@@ -333,7 +355,11 @@ class HdaTranslator:
         self.print_to_screen = print_to_screen
         self.output_directory = output_directory
         self.should_validate_field_value = should_validate_field_value
-        self.sample_files = sample_files
+        self.seq1 = seq1
+        self.seq2 = seq2
+        self.countFile = countFile
+
+        self.sample_files = SampleFiles(sample_files_dir) if sample_files_dir else None
 
     def process_one_hda_file(self, parser, hda_input_file, output_directory):
         start_time = time.time()
@@ -363,18 +389,43 @@ class HdaTranslator:
         # Parse HDA File
         parser = HdaParser(content_model_definition)
 
-        for f in os.listdir(self.wcc_archives_input_dir):
+        # nested function used to sort files on sequence number
+        def take_seq(f):
             if f.endswith('.hda') and f != 'docmetadefinition.hda':
-                inputFile = self.wcc_archives_input_dir+ '/' + f 
                 seqno = f.split('~')[1].split('.')[0]
+                return int(seqno)
+            else:
+                return -1
+
+        prev_count_file = self.countFile
+        global name_field_value_count
+        for f in sorted(os.listdir(self.wcc_archives_input_dir), key=take_seq):
+            if f.endswith('.hda') and f != 'docmetadefinition.hda':
+                seqno = f.split('~')[1].split('.')[0]
+                iSeqno = int(seqno)   # seqno is always an integer
+                count_file = self.output_directory + '/' + f + '.count'
+                if iSeqno < self.seq1 or (self.seq2 > 0 and iSeqno > self.seq2):
+                    prev_count_file = count_file
+                    continue
+
+                inputFile = self.wcc_archives_input_dir+ '/' + f
                 output = self.output_directory + '/' + seqno
+
+                if prev_count_file and os.path.isfile(prev_count_file):
+                    with open(prev_count_file, 'rb') as handle:
+                        name_field_value_count = pickle.load(handle)
 
                 if not os.path.exists(output):
                     os.makedirs(output)
 
                 self.process_one_hda_file(parser, inputFile, output)
 
-    # derive wcc field name from from acs field name, if wcc field name is not specified 
+                # save count file for use by next .hda file
+                with open(count_file, 'wb') as handle:
+                    pickle.dump(name_field_value_count, handle, protocol=pickle.HIGHEST_PROTOCOL)
+                prev_count_file = count_file
+
+    # derive wcc field name from from acs field name, if wcc field name is not specified
     def __get_fields(self, rawfields):
         processed_fields = []
         for f in rawfields:
@@ -439,6 +490,9 @@ def parse_arguments():
                         help='The profile to load from the content model definition', required=True)
     parser.add_argument('-s', '--sampleFilesDir',
                         help='The sample files directory')
+    parser.add_argument('--seq1', type=int, default=1, help='starting sequence number')
+    parser.add_argument('--seq2', type=int, default=-1, help='ending sequence number')
+    parser.add_argument('-c', '--countFile', help='name_field_value_count file to use for sequence 1')
     parser.add_argument('--validate', help='Validate data based on field type, and print to screen',
                         action='store_true')
     return parser.parse_args()
@@ -457,6 +511,7 @@ def main():
     logging.info('Input directory: ' + args.input)
     logging.info('Base output directory: ' + args.output)
 
+    # we probably should pass args, as the list becomes long
     translator = HdaTranslator(args.contentModelDefinition,
                                args.profile,
                                args.csv,
@@ -464,7 +519,11 @@ def main():
                                args.numberToProcess,
                                args.printToScreen,
                                args.output,
-                               args.validate)
+                               args.validate,
+                               args.seq1,
+                               args.seq2,
+                               args.countFile,
+                               args.sampleFilesDir)
     start_time = time.time()
 
     translator.run()
