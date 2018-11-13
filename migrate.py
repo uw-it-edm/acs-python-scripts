@@ -397,13 +397,17 @@ class HdaTranslator:
             else:
                 return -1
 
+        count_file_dir = self.output_directory + '/count_files'
+        if not os.path.exists(count_file_dir):
+            os.makedirs(count_file_dir)
+
         prev_count_file = self.countFile
         global name_field_value_count
         for f in sorted(os.listdir(self.wcc_archives_input_dir), key=take_seq):
             if f.endswith('.hda') and f != 'docmetadefinition.hda':
                 seqno = f.split('~')[1].split('.')[0]
                 iSeqno = int(seqno)   # seqno is always an integer
-                count_file = self.output_directory + '/' + f + '.count'
+                count_file = count_file_dir + '/' + f + '.count'
                 if iSeqno < self.seq1 or (self.seq2 > 0 and iSeqno > self.seq2):
                     prev_count_file = count_file
                     continue
