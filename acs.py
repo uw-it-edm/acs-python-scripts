@@ -221,6 +221,28 @@ def createOrUpdateFilePlan(acs, filePlan):
                 createOrUpdateChildCategories(acs, category['id'], rc['children']);
 
 #############################################
+# create app user
+def createAppUser(acs, user):
+    # sanity check
+    if not user:
+        logging.warn('no user. noop')
+        return
+
+    # create user if it does not exist
+    name = user['name']
+    password = user['password']
+    u = acs.getUser(name)
+    if u:
+        logging.info('app user "' + name + '" already exists')
+    else:
+        logging.info('create app user "' + name + '"')
+        u = acs.createAppUser(name, password)
+
+    if u and not u['capabilities']['isAdmin']:
+        logging.info('add app user "' + name + '" to admin group')
+        acs.addGroupMember('GROUP_ALFRESCO_ADMINISTRATORS', name, 'PERSON')
+
+#############################################
 # main
 def main():
     # config logging
@@ -247,6 +269,11 @@ def main():
         if not acs.getGroup(adminGroup):
             acs.createGroup(adminGroup, adminGroup)
         acs.addGroupMember('ALFRESCO_ADMINISTRATORS', adminGroup)
+
+    # create app users
+    if conf and conf['appUsers']:
+        for user in conf['appUsers']:
+            createAppUser(acs, user);
 
     # create and update sites
     if conf and conf['sites']:
