@@ -222,7 +222,7 @@ def createOrUpdateFilePlan(acs, filePlan):
 
 #############################################
 # create app user
-def createAppUser(acs, user):
+def createAdminAppUser(acs, user):
     # sanity check
     if not user:
         logging.warn('no user. noop')
@@ -236,7 +236,7 @@ def createAppUser(acs, user):
         logging.info('app user "' + name + '" already exists')
     else:
         logging.info('create app user "' + name + '"')
-        u = acs.createAppUser(name, password)
+        u = acs.createAdminAppUser(name, password)
 
     if u and not u['capabilities']['isAdmin']:
         logging.info('add app user "' + name + '" to admin group')
@@ -271,9 +271,9 @@ def main():
         acs.addGroupMember('ALFRESCO_ADMINISTRATORS', adminGroup)
 
     # create app users
-    if conf and conf['appUsers']:
-        for user in conf['appUsers']:
-            createAppUser(acs, user);
+    if conf and conf['adminAppUsers']:
+        for user in conf['adminAppUsers']:
+            createAdminAppUser(acs, user);
 
     # create and update sites
     if conf and conf['sites']:

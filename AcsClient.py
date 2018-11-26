@@ -155,7 +155,7 @@ class AcsClient:
         return result and result['entry']
 
     # both firstName and email are required fields
-    def createAppUser(self, name, password):
+    def createAdminAppUser(self, name, password):
         url = self.api_prefix + '/people'
         data = {"id": name, "password": password, "description": "app user",
                 "firstName": name,"email":name, "emailNotificationsEnabled":"false"}
