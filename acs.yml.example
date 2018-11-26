@@ -4,6 +4,10 @@ default:
   url: <Alfresco Repository URL, e.g. 'https://localhost:8080'>
   rootGroup: my_root_group
   adminGroup: my_admin_group
+  adminAppUsers:
+  - name: app-user
+    password: app-user-pw
+
   sites:
     - id: testsite
       title: Test Site

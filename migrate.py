@@ -1,4 +1,9 @@
 #!/usr/bin/python
+#
+# example:
+# ./migrate.py -pMyProfile -i/var/data/archives/test/18-oct-30_09.28.23_669_07 -o/myhomedir/data/test-data -s/myhomedir/sample-files
+#
+
 
 import argparse
 import csv
@@ -14,9 +19,14 @@ import yaml
 
 import util
 
+import cPickle as pickle
+
 # script version and run time
 __version__ = '1.0'
 scriptVersionAndRunTime = __version__ + ' ' + str(datetime.now())
+
+# need to count across .hda files
+name_field_value_count = {}
 
 class InvalidDocument(Exception):
     def __init__(self,field_name, field_type, field_value, document_id):
@@ -44,6 +54,26 @@ class ContentModelDefinition:
         self.aspects = aspects
         self.content_type = content_type
 
+
+class SampleFiles:
+    def __init__(self, dirpath):
+        self.ext_to_path = {}
+        for f in os.listdir(dirpath):
+            path_parts = os.path.splitext(f)
+            if len(path_parts) >= 2:
+                ext = path_parts[-1]
+                fullpath = dirpath+'/'+f
+                if ext in self.ext_to_path:
+                    self.ext_to_path[ext].append(fullpath)
+                else:
+                    self.ext_to_path[ext] = [fullpath]
+
+    def get(self, ext, idx=0):
+        if ext in self.ext_to_path:
+            l = len(self.ext_to_path[ext])
+            return self.ext_to_path[ext][idx % l]
+        else:
+            return None
 
 class WebcenterData:
     BL_DATE_FORMAT = "%Y-%m-%d %H:%M:%S.%f"
@@ -84,7 +114,6 @@ class WebcenterData:
             writer.writerow(self.field_names)
             writer.writerows(self.data_rows)
 
-
 class HdaParser:
     EXPECTED_BL_DATE_FORMAT = "'{ts' ''yyyy-MM-dd HH:mm:ss{.SSS}[Z]'''}'!tAmerica/Los_Angeles"
 
@@ -95,10 +124,6 @@ class HdaParser:
 
     def parse_metadata(self, input, number_to_process):
         process_all_documents = (number_to_process is None)
-        if process_all_documents:
-            logging.info("Processing all documents from file: " + input)
-        else:
-            logging.info("Processing " + str(number_to_process) + "documents from file: " + input)
 
         # primary_file in hda files uses relative path. Need to prepend basedir, which
         # is the grand parent of the hda file
@@ -172,8 +197,6 @@ class WccXmlWriter:
         self.sample_files = sample_files
 
     def write_xml_files(self, output, print_to_screen):
-        logging.info('writing xml to: ' + output)
-
         for i in range(0, self.wcc_data.number_of_data_rows):
             try:
                 xml_doc = self.__create_xml(i)
@@ -185,7 +208,7 @@ class WccXmlWriter:
                         self.__write_xml_file(xml_doc, primary_file_name, output)
                         self.__link_content_file(primary_file_name, file_ext, output, i)
                     else:
-                        logging.warning("missing ext " + file_ext + " in sample files")
+                        logging.warning("  missing ext " + file_ext + " in sample files")
                 else:
                     primary_file = self.wcc_data.data_rows[i][self.primary_file_field_index]
                     self.__write_xml_file(xml_doc, primary_file_name, output)
@@ -233,7 +256,7 @@ class WccXmlWriter:
 
         xml_file_name = primary_file_name + ".metadata.properties.xml"
         xml_file = os.path.join(xml_file_output_dir, xml_file_name)
-        logging.debug('writing to xml: ' + xml_file)
+        logging.debug('  writing to xml: ' + xml_file)
 
         # xml_declaration=True is not supported by python 2.6.6 on uwctprod01
         ElementTree.ElementTree(xml_doc).write(xml_file, encoding='UTF-8')
@@ -256,7 +279,8 @@ class WccXmlWriter:
 
         def add_fields(document):
             primary_file_name = self.__get_primary_file_name(document_index)
-            file_ext = os.path.splitext(primary_file_name)[1]
+            file_name_parts = os.path.splitext(primary_file_name)
+            file_ext = file_name_parts[1] if len(file_name_parts) >= 2 else ''
             for field in self.wcc_data.content_model_definition.fields:
                 source_field = field['source_field']
                 field_type = field['type'] if 'type' in field else 'text'
@@ -270,8 +294,16 @@ class WccXmlWriter:
                 if field_type == 'date' and field_value != '':
                     field_value = field_value.isoformat()
 
-                if field_name == 'cm:name' and field_value.find('.') < 0:
-                    field_value += file_ext
+                if field_name == 'cm:name':
+                    if field_value.find('.') < 0:
+                        field_value += file_ext
+
+                    if field_value in name_field_value_count:
+                        file_name_parts = os.path.splitext(field_value)
+                        name_field_value_count[field_value] += 1
+                        field_value = file_name_parts[0] + '(' + str(name_field_value_count[field_value] - 1) + ')' + file_name_parts[-1]
+                    else:
+                        name_field_value_count[field_value] = 1
 
                 if (field_type == 'date' or field_type == 'int') and field_value == '':
                     pass  # Don't write date or int fields if they don't have values
@@ -313,17 +345,42 @@ class WccXmlWriter:
 
 class HdaTranslator:
     def __init__(self, content_model_definition_file, content_model_profile, csv_file,
-                 hda_input_file, number_of_docs_to_process, print_to_screen, xml_output_directory,
-                 should_validate_field_value, sample_files=None):
+                 wcc_archives_input_dir, number_of_docs_to_process, print_to_screen, output_directory,
+                 should_validate_field_value, seq1, seq2, countFile, sample_files_dir=None):
         self.content_model_definition_file = content_model_definition_file
         self.content_model_profile = content_model_profile
         self.csv_file = csv_file
-        self.hda_input_file = hda_input_file
+        self.wcc_archives_input_dir = wcc_archives_input_dir
         self.number_of_docs_to_process = number_of_docs_to_process
         self.print_to_screen = print_to_screen
-        self.xml_output_directory = xml_output_directory
+        self.output_directory = output_directory
         self.should_validate_field_value = should_validate_field_value
-        self.sample_files = sample_files
+        self.seq1 = seq1
+        self.seq2 = seq2
+        self.countFile = countFile
+
+        self.sample_files = SampleFiles(sample_files_dir) if sample_files_dir else None
+
+    def process_one_hda_file(self, parser, hda_input_file, output_directory):
+        start_time = time.time()
+
+        # Translate Results
+        wcc_data = parser.parse_metadata(hda_input_file, self.number_of_docs_to_process)
+        wcc_data.convert_dates()
+
+        logging.info('Processing ' + hda_input_file)
+        logging.info('  number of data rows: ' + str(wcc_data.number_of_data_rows))
+        logging.info('  output directory: ' + output_directory)
+
+        if self.csv_file:
+            wcc_data.write_csv(self.csv_file)
+
+        if output_directory:
+            wcc_xml_writer = WccXmlWriter(wcc_data, self.should_validate_field_value, self.sample_files)
+            wcc_xml_writer.write_xml_files(output_directory, self.print_to_screen)
+
+        end_time = time.time()
+        logging.info('  duration: ' + str(end_time - start_time) + ' seconds')
 
     def run(self):
         # Load Content Model
@@ -332,21 +389,46 @@ class HdaTranslator:
         # Parse HDA File
         parser = HdaParser(content_model_definition)
 
-        # Translate Results
-        wcc_data = parser.parse_metadata(self.hda_input_file, self.number_of_docs_to_process)
-        wcc_data.convert_dates()
+        # nested function used to sort files on sequence number
+        def take_seq(f):
+            if f.endswith('.hda') and f != 'docmetadefinition.hda':
+                seqno = f.split('~')[1].split('.')[0]
+                return int(seqno)
+            else:
+                return -1
 
-        logging.info('Content Profile: ' + wcc_data.content_model_definition.profile)
-        logging.info('Number of data rows: ' + str(wcc_data.number_of_data_rows))
+        count_file_dir = self.output_directory + '/count_files'
+        if not os.path.exists(count_file_dir):
+            os.makedirs(count_file_dir)
 
-        if self.csv_file:
-            wcc_data.write_csv(self.csv_file)
+        prev_count_file = self.countFile
+        global name_field_value_count
+        for f in sorted(os.listdir(self.wcc_archives_input_dir), key=take_seq):
+            if f.endswith('.hda') and f != 'docmetadefinition.hda':
+                iSeqno = take_seq(f)
+                count_file = count_file_dir + '/' + f + '.count'
+                if iSeqno < self.seq1 or (self.seq2 > 0 and iSeqno > self.seq2):
+                    prev_count_file = count_file
+                    continue
 
-        if self.xml_output_directory:
-            wcc_xml_writer = WccXmlWriter(wcc_data, self.should_validate_field_value, self.sample_files)
-            wcc_xml_writer.write_xml_files(self.xml_output_directory, self.print_to_screen)
+                inputFile = self.wcc_archives_input_dir+ '/' + f
+                output = self.output_directory + '/' + str(iSeqno)
 
-    # derive wcc field name from from acs field name, if wcc field name is not specified 
+                if prev_count_file and os.path.isfile(prev_count_file):
+                    with open(prev_count_file, 'rb') as handle:
+                        name_field_value_count = pickle.load(handle)
+
+                if not os.path.exists(output):
+                    os.makedirs(output)
+
+                self.process_one_hda_file(parser, inputFile, output)
+
+                # save count file for use by next .hda file
+                with open(count_file, 'wb') as handle:
+                    pickle.dump(name_field_value_count, handle, protocol=pickle.HIGHEST_PROTOCOL)
+                prev_count_file = count_file
+
+    # derive wcc field name from from acs field name, if wcc field name is not specified
     def __get_fields(self, rawfields):
         processed_fields = []
         for f in rawfields:
@@ -398,7 +480,7 @@ class HdaTranslator:
 
 def parse_arguments():
     parser = argparse.ArgumentParser()
-    parser.add_argument('-i', '--input', help='The input .hda file', required=True)
+    parser.add_argument('-i', '--input', help='The input directory', required=True)
     parser.add_argument('--csv', help='An optional csv file for output of all the migrated data')
     parser.add_argument('--printToScreen', help='Print output xml to screen', action='store_true')
     parser.add_argument('-o', '--output', help='The output directory for xml files', required=True)
@@ -406,9 +488,14 @@ def parse_arguments():
                         help='The number of documents to process, defaults to all',
                         type=int)
     parser.add_argument('-m', '--contentModelDefinition',
-                        help='The definition of the content model', required=True)
+                        help='The definition of the content model', default='migration_content_models.yml')
     parser.add_argument('-p', '--profile',
                         help='The profile to load from the content model definition', required=True)
+    parser.add_argument('-s', '--sampleFilesDir',
+                        help='The sample files directory')
+    parser.add_argument('--seq1', type=int, default=1, help='starting sequence number')
+    parser.add_argument('--seq2', type=int, default=-1, help='ending sequence number')
+    parser.add_argument('-c', '--countFile', help='name_field_value_count file to use for sequence 1')
     parser.add_argument('--validate', help='Validate data based on field type, and print to screen',
                         action='store_true')
     return parser.parse_args()
@@ -423,6 +510,11 @@ def main():
     args = parse_arguments()
     configure_logging()
 
+    logging.info('Content Profile: ' + args.profile)
+    logging.info('Input directory: ' + args.input)
+    logging.info('Base output directory: ' + args.output)
+
+    # we probably should pass args, as the list becomes long
     translator = HdaTranslator(args.contentModelDefinition,
                                args.profile,
                                args.csv,
@@ -430,13 +522,17 @@ def main():
                                args.numberToProcess,
                                args.printToScreen,
                                args.output,
-                               args.validate)
+                               args.validate,
+                               args.seq1,
+                               args.seq2,
+                               args.countFile,
+                               args.sampleFilesDir)
     start_time = time.time()
 
     translator.run()
 
     end_time = time.time()
-    logging.info('Translation time: ' + str(end_time - start_time))
+    logging.info('Translation time: ' + str(end_time - start_time) + " seconds")
 
 
 if __name__ == "__main__":

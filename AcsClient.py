@@ -64,7 +64,7 @@ class AcsClient:
         return self.handleResponse(response)
 
     ######################################
-    # groups API 
+    # groups API
     def getGroup(self, id):
         url = self.api_prefix + '/groups/' + fullGroupId(id)
         r = self._get(url)
@@ -101,7 +101,7 @@ class AcsClient:
         return r
 
     ######################################
-    # nodes API 
+    # nodes API
     def getNodeById(self, nodeId):
         url = self.api_prefix + '/nodes/' + nodeId
         r = self._get(url)
@@ -148,7 +148,22 @@ class AcsClient:
         return result
 
     ######################################
-    # sites API 
+    # people API
+    def getUser(self, name):
+        url = self.api_prefix + '/people/' + name
+        result = self._get(url)
+        return result and result['entry']
+
+    # both firstName and email are required fields
+    def createAdminAppUser(self, name, password):
+        url = self.api_prefix + '/people'
+        data = {"id": name, "password": password, "description": "app user",
+                "firstName": name,"email":name, "emailNotificationsEnabled":"false"}
+        r = self._post(url, json=data)
+        return r and r['entry']
+
+    ######################################
+    # sites API
     def createSite(self, id, title, desc, visibility='PRIVATE'):
         url = self.api_prefix + '/sites'
         data = {"id": id, "title": title, "description": desc, "visibility": visibility}
@@ -201,9 +216,9 @@ class AcsClient:
 
     ######################################
     # bulk import API
-    def startBulkImport(self, sourceDir, targetPath):
+    def startBulkImport(self, sourceDir, targetPath, batchSize=20, numThreads=10, existingFileMode='REPLACE'):
         url = self.urlbase + '/alfresco/s/bulkfsimport/initiate'
-        data = {"sourceDirectory": sourceDir, "targetPath":targetPath}
+        data = {"sourceDirectory": sourceDir, "targetPath":targetPath, "batchSize":batchSize, "numThreads": numThreads, "existingFileMode":existingFileMode}
         r = self._post(url, data=data)
 
     def getBulkImportStatus(self):
@@ -214,7 +229,7 @@ class AcsClient:
         return {"currentStatus": currentStatus.text, "lastResult":resultOfLastExecution.text}
 
     ######################################
-    # file plan APIs 
+    # file plan APIs
     def getRmSite(self):
         url = self.gs_api_prefix + '/gs-sites/rm'
         r = self._get(url)
@@ -231,7 +246,7 @@ class AcsClient:
         r = self._get(url)
         return r and r['list'] and r['list']['entries']
 
-    def createRootRecordCategory(self, name): 
+    def createRootRecordCategory(self, name):
         url = self.gs_api_prefix + '/file-plans/-filePlan-/categories'
         data = {"name": name}
         r = self._post(url, json=data)
@@ -242,13 +257,13 @@ class AcsClient:
         r = self._get(url)
         return r and r['list'] and r['list']['entries']
 
-    def createRecordCategory(self, parentId, name): 
+    def createRecordCategory(self, parentId, name):
         url = self.gs_api_prefix + '/record-categories/' + parentId + '/children'
         data = {"name": name, "nodeType":"rma:recordCategory"}
         r = self._post(url, json=data)
         return r and r['entry']
 
-    def createRecordFolder(self, parentId, name): 
+    def createRecordFolder(self, parentId, name):
         url = self.gs_api_prefix + '/record-categories/' + parentId + '/children'
         data = {"name": name, "nodeType":"rma:recordFolder"}
         r = self._post(url, json=data)
