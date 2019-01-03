@@ -492,7 +492,7 @@ def parse_arguments():
     parser.add_argument('-p', '--profile',
                         help='The profile to load from the content model definition', required=True)
     parser.add_argument('-s', '--sampleFilesDir',
-                        help='The sample files directory')
+                        help='The sample files directory, when associating fake content with the data')
     parser.add_argument('--seqStart', type=int, default=1, help='starting sequence number')
     parser.add_argument('--seqEnd', type=int, default=-1, help='ending sequence number')
     parser.add_argument('-c', '--countFile', help='name_field_value_count file to use for sequence 1')

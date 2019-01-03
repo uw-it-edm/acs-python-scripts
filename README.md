@@ -17,7 +17,7 @@
 ```
 usage: migrate.py [-h] -i INPUT [--csv CSV] [--printToScreen] -o OUTPUT
                   [-n NUMBERTOPROCESS] [-m CONTENTMODELDEFINITION] -p PROFILE
-                  [-s SAMPLEFILESDIR] [--seq1 SEQ1] [--seq2 SEQ2]
+                  [-s SAMPLEFILESDIR] [--seqStart SEQSTART] [--seqEnd SEQEND]
                   [-c COUNTFILE] [--validate]
 
 optional arguments:
@@ -36,7 +36,7 @@ optional arguments:
   -p PROFILE, --profile PROFILE
                         The profile to load from the content model definition
   -s SAMPLEFILESDIR, --sampleFilesDir SAMPLEFILESDIR
-                        The sample files directory
+                        The sample files directory, when associating fake content with the data
   --seqStart SEQ1       Starting sequence number
   --seqEnd SEQ2         Ending sequence number
   -c COUNTFILE, --countFile COUNTFILE
@@ -48,4 +48,5 @@ optional arguments:
 examples
  * one hda file: `python ./migrate.py -i ./hda_files/ --contentModelDefinition=./content_models.yml --csv=./export.csv  -o ./acs_import -p PROFILE_1  --seqStart 1 --seqEnd 1`
  * all hda files in directory: `python ./migrate.py -i ./hda_files/ --contentModelDefinition=./content_models.yml --csv=./export.csv  -o ./acs_import -p PROFILE_1`
+ * all hda files in directory, replacing the content with sample files: `python ./migrate.py -i ./hda_files/ --contentModelDefinition=./content_models.yml --csv=./export.csv  -o ./acs_import -p PROFILE_1 -s ./sample-files`
  
