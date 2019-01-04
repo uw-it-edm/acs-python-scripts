@@ -346,7 +346,7 @@ class WccXmlWriter:
 class HdaTranslator:
     def __init__(self, content_model_definition_file, content_model_profile, csv_file,
                  wcc_archives_input_dir, number_of_docs_to_process, print_to_screen, output_directory,
-                 should_validate_field_value, seq1, seq2, countFile, sample_files_dir=None):
+                 should_validate_field_value, seqStart, seqEnd, countFile, sample_files_dir=None):
         self.content_model_definition_file = content_model_definition_file
         self.content_model_profile = content_model_profile
         self.csv_file = csv_file
@@ -355,8 +355,8 @@ class HdaTranslator:
         self.print_to_screen = print_to_screen
         self.output_directory = output_directory
         self.should_validate_field_value = should_validate_field_value
-        self.seq1 = seq1
-        self.seq2 = seq2
+        self.seqStart = seqStart
+        self.seqEnd = seqEnd
         self.countFile = countFile
 
         self.sample_files = SampleFiles(sample_files_dir) if sample_files_dir else None
@@ -407,7 +407,7 @@ class HdaTranslator:
             if f.endswith('.hda') and f != 'docmetadefinition.hda':
                 iSeqno = take_seq(f)
                 count_file = count_file_dir + '/' + f + '.count'
-                if iSeqno < self.seq1 or (self.seq2 > 0 and iSeqno > self.seq2):
+                if iSeqno < self.seqStart or (self.seqEnd > 0 and iSeqno > self.seqEnd):
                     prev_count_file = count_file
                     continue
 
@@ -485,16 +485,16 @@ def parse_arguments():
     parser.add_argument('--printToScreen', help='Print output xml to screen', action='store_true')
     parser.add_argument('-o', '--output', help='The output directory for xml files', required=True)
     parser.add_argument('-n', '--numberToProcess',
-                        help='The number of documents to process, defaults to all',
+                        help='The number of documents to process per hda file, defaults to all',
                         type=int)
     parser.add_argument('-m', '--contentModelDefinition',
                         help='The definition of the content model', default='migration_content_models.yml')
     parser.add_argument('-p', '--profile',
                         help='The profile to load from the content model definition', required=True)
     parser.add_argument('-s', '--sampleFilesDir',
-                        help='The sample files directory')
-    parser.add_argument('--seq1', type=int, default=1, help='starting sequence number')
-    parser.add_argument('--seq2', type=int, default=-1, help='ending sequence number')
+                        help='The sample files directory, when associating fake content with the data')
+    parser.add_argument('--seqStart', type=int, default=1, help='starting sequence number')
+    parser.add_argument('--seqEnd', type=int, default=-1, help='ending sequence number')
     parser.add_argument('-c', '--countFile', help='name_field_value_count file to use for sequence 1')
     parser.add_argument('--validate', help='Validate data based on field type, and print to screen',
                         action='store_true')
@@ -523,8 +523,8 @@ def main():
                                args.printToScreen,
                                args.output,
                                args.validate,
-                               args.seq1,
-                               args.seq2,
+                               args.seqStart,
+                               args.seqEnd,
                                args.countFile,
                                args.sampleFilesDir)
     start_time = time.time()
