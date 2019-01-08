@@ -193,14 +193,19 @@ class WccXmlWriter:
     def __init__(self, wcc_data, should_validate_field_value, sample_files):
         self.wcc_data = wcc_data
         self.primary_file_field_index = self.wcc_data.field_names.index('primaryFile')
+        self.account_field_index = self.wcc_data.field_names.index('dDocAccount')
+        self.creation_date_field_index = self.wcc_data.field_names.index('dDocCreatedDate')
+        self.profile_field_index = self.wcc_data.field_names.index('xIdcProfile')
+        self.scan_date_field_index = self.wcc_data.field_names.index('xuwScanDate')
         self.should_validate_field_value = should_validate_field_value
         self.sample_files = sample_files
 
-    def write_xml_files(self, output, print_to_screen):
+    def write_xml_files(self, output_base, print_to_screen):
         for i in range(0, self.wcc_data.number_of_data_rows):
             try:
                 xml_doc = self.__create_xml(i)
                 primary_file_name = self.__get_primary_file_name(i)
+                output = self.__get_doc_output_dir(i, output_base)
                 file_ext = self.__get_primary_file_ext(i)
                 self.__print_xml_to_screen(xml_doc, print_to_screen)
                 if self.sample_files:
@@ -208,7 +213,7 @@ class WccXmlWriter:
                         self.__write_xml_file(xml_doc, primary_file_name, output)
                         self.__link_content_file(primary_file_name, file_ext, output, i)
                     else:
-                        logging.warning("  missing ext " + file_ext + " in sample files")
+                        logging.debug("  missing ext " + file_ext + " in sample files")
                 else:
                     primary_file = self.wcc_data.data_rows[i][self.primary_file_field_index]
                     self.__write_xml_file(xml_doc, primary_file_name, output)
@@ -231,6 +236,20 @@ class WccXmlWriter:
            file_ext = file_name_parts[1]
 
         return file_ext
+
+    def __get_creation_date(self, document_index):
+        profile = self.wcc_data.data_rows[document_index][self.profile_field_index]
+        creation_date = self.wcc_data.data_rows[document_index][self.creation_date_field_index]
+
+        # use scan date docs of Procurement, SFS, and Facilities created in 2015
+        if profile in ['Procurement','StudentFiscalServices','Facilities'] and creation_date.year==2015:
+            creation_date = self.wcc_data.data_rows[document_index][self.scan_date_field_index]
+        return creation_date
+
+    def __get_doc_output_dir(self, document_index, output_base):
+        account = self.wcc_data.data_rows[document_index][self.account_field_index]
+        dt = self.__get_creation_date(document_index)
+        return output_base + '/' + account + '/' + str(dt.year) + '/' + str(dt.month) + '/' + str(dt.day)
 
     def __link_content_file(self, primary_file_name, file_ext, xml_file_output_dir, idx=0):
         primary_file = os.path.join(self.wcc_data.basedir, self.wcc_data.data_rows[idx][self.primary_file_field_index])
@@ -281,12 +300,17 @@ class WccXmlWriter:
             primary_file_name = self.__get_primary_file_name(document_index)
             file_name_parts = os.path.splitext(primary_file_name)
             file_ext = file_name_parts[1] if len(file_name_parts) >= 2 else ''
+            creation_date = self.__get_creation_date(document_index)
             for field in self.wcc_data.content_model_definition.fields:
                 source_field = field['source_field']
                 field_type = field['type'] if 'type' in field else 'text'
                 field_name = field['name']
                 field_index = self.wcc_data.field_names.index(source_field)
                 field_value = self.wcc_data.data_rows[document_index][field_index]
+
+                # special handling for creation date
+                if field_name == 'cm:created':
+                    field_value = creation_date
 
                 if self.should_validate_field_value:
                     validate_field_value(field_name, field_type, field_value)
@@ -298,12 +322,14 @@ class WccXmlWriter:
                     if field_value.find('.') < 0:
                         field_value += file_ext
 
-                    if field_value in name_field_value_count:
+                    # include "year/month/day" (e.g. "2018/02/02") in field_value_key
+                    field_value_key = str(creation_date.year)+'/'+str(creation_date.month)+'/' + str(creation_date.day)+'/'+field_value
+                    if field_value_key in name_field_value_count:
                         file_name_parts = os.path.splitext(field_value)
-                        name_field_value_count[field_value] += 1
-                        field_value = file_name_parts[0] + '(' + str(name_field_value_count[field_value] - 1) + ')' + file_name_parts[-1]
+                        name_field_value_count[field_value_key] += 1
+                        field_value = file_name_parts[0] + '(' + str(name_field_value_count[field_value_key] - 1) + ')' + file_name_parts[-1]
                     else:
-                        name_field_value_count[field_value] = 1
+                        name_field_value_count[field_value_key] = 1
 
                 if (field_type == 'date' or field_type == 'int') and field_value == '':
                     pass  # Don't write date or int fields if they don't have values
@@ -405,14 +431,15 @@ class HdaTranslator:
         global name_field_value_count
         for f in sorted(os.listdir(self.wcc_archives_input_dir), key=take_seq):
             if f.endswith('.hda') and f != 'docmetadefinition.hda':
-                iSeqno = take_seq(f)
+                seqno = f.split('~')[1].split('.')[0]
+                iSeqno = int(seqno)   # seqno is always an integer
                 count_file = count_file_dir + '/' + f + '.count'
                 if iSeqno < self.seqStart or (self.seqEnd > 0 and iSeqno > self.seqEnd):
                     prev_count_file = count_file
                     continue
 
                 inputFile = self.wcc_archives_input_dir+ '/' + f
-                output = self.output_directory + '/' + str(iSeqno)
+                output = self.output_directory + '/' + seqno
 
                 if prev_count_file and os.path.isfile(prev_count_file):
                     with open(prev_count_file, 'rb') as handle:

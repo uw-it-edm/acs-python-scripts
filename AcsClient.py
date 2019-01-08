@@ -20,6 +20,7 @@ class AcsClient:
         self.user = user
         self.pw = pw
         self.auth = (user, pw)
+        self.session = requests.Session()
 
     @classmethod
     def fromConfig(cls, filename=None, stage='dev'):
@@ -49,18 +50,18 @@ class AcsClient:
             response.raise_for_status()
 
     def _get(self, url):
-        response = requests.get(url, auth=self.auth)
+        response = self.session.get(url, auth=self.auth)
         if response.status_code == requests.codes.not_found:
             return None
         else:
             return self.handleResponse(response)
 
     def _post(self, url, json=None, data=None, files=None):
-        response = requests.post(url, auth=self.auth, json=json, data=data, files=files)
+        response = self.session.post(url, auth=self.auth, json=json, data=data, files=files)
         return self.handleResponse(response)
 
     def _put(self, url, json=None, data=None, files=None):
-        response = requests.put(url, auth=self.auth, json=json, data=data, files=files)
+        response = self.session.put(url, auth=self.auth, json=json, data=data, files=files)
         return self.handleResponse(response)
 
     ######################################
