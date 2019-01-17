@@ -271,7 +271,7 @@ def main():
         acs.addGroupMember('ALFRESCO_ADMINISTRATORS', adminGroup)
 
     # create app users
-    if conf and conf['adminAppUsers']:
+    if conf and 'adminAppUsers' in conf and conf['adminAppUsers']:
         for user in conf['adminAppUsers']:
             createAdminAppUser(acs, user);
 
