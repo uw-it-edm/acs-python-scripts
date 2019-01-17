@@ -2,17 +2,19 @@ import requests
 from xml.etree import ElementTree
 import util
 
+
 ######################################
 # convenience (module) functions
 # return full group Id
 def fullGroupId(groupId):
     return groupId if groupId.startswith('GROUP_') else 'GROUP_' + groupId
 
+
 #############################################
 class AcsClient:
     ######################################
     # constructor
-    def __init__(self, urlbase, user, pw):
+    def __init__(self, urlbase, user, pw, use_session=True):
         self.urlbase = urlbase
         self.api_prefix = urlbase + '/alfresco/api/-default-/public/alfresco/versions/1'
         self.gs_api_prefix = urlbase + '/alfresco/api/-default-/public/gs/versions/1'
@@ -20,7 +22,10 @@ class AcsClient:
         self.user = user
         self.pw = pw
         self.auth = (user, pw)
-        self.session = requests.Session()
+        if use_session:
+            self.session = requests.Session()
+        else:
+            self.session = requests
 
     @classmethod
     def fromConfig(cls, filename=None, stage='dev'):
@@ -79,7 +84,7 @@ class AcsClient:
 
     def createGroup(self, id, displayName, parentId='GROUP_uw_groups'):
         url = self.api_prefix + '/groups'
-        data = {"id": id, "displayName": displayName, "parentIds":[fullGroupId(parentId)]}
+        data = {"id": id, "displayName": displayName, "parentIds": [fullGroupId(parentId)]}
         r = self._post(url, json=data)
         return r and r['entry']
 
@@ -115,7 +120,7 @@ class AcsClient:
         return r and r['entry']
 
     def createFolder(self, parentId, folderName):
-        url = self.api_prefix + '/nodes/' + parentId+ '/children'
+        url = self.api_prefix + '/nodes/' + parentId + '/children'
         data = {"name": folderName, "nodeType": "cm:folder"}
         r = self._post(url, json=data)
         return r and r['entry']
@@ -159,7 +164,7 @@ class AcsClient:
     def createAdminAppUser(self, name, password):
         url = self.api_prefix + '/people'
         data = {"id": name, "password": password, "description": "app user",
-                "firstName": name,"email":name, "emailNotificationsEnabled":"false"}
+                "firstName": name, "email": name, "emailNotificationsEnabled": "false"}
         r = self._post(url, json=data)
         return r and r['entry']
 
@@ -219,7 +224,8 @@ class AcsClient:
     # bulk import API
     def startBulkImport(self, sourceDir, targetPath, batchSize=20, numThreads=10, existingFileMode='REPLACE'):
         url = self.urlbase + '/alfresco/s/bulkfsimport/initiate'
-        data = {"sourceDirectory": sourceDir, "targetPath":targetPath, "batchSize":batchSize, "numThreads": numThreads, "existingFileMode":existingFileMode}
+        data = {"sourceDirectory": sourceDir, "targetPath": targetPath, "batchSize": batchSize,
+                "numThreads": numThreads, "existingFileMode": existingFileMode}
         r = self._post(url, data=data)
 
     def getBulkImportStatus(self):
@@ -227,7 +233,7 @@ class AcsClient:
         r = self._get(url)
         currentStatus = r.find('CurrentStatus')
         resultOfLastExecution = r.find('ResultOfLastExecution')
-        return {"currentStatus": currentStatus.text, "lastResult":resultOfLastExecution.text}
+        return {"currentStatus": currentStatus.text, "lastResult": resultOfLastExecution.text}
 
     ######################################
     # file plan APIs
@@ -238,7 +244,7 @@ class AcsClient:
 
     def createRmSite(self, title='Records Management', description='Records Management Site', compliance='DOD5015'):
         url = self.gs_api_prefix + '/gs-sites'
-        data = {"title": title, "description": description, "compliance":compliance}
+        data = {"title": title, "description": description, "compliance": compliance}
         r = self._post(url, json=data)
         return r and r['entry']
 
@@ -260,12 +266,12 @@ class AcsClient:
 
     def createRecordCategory(self, parentId, name):
         url = self.gs_api_prefix + '/record-categories/' + parentId + '/children'
-        data = {"name": name, "nodeType":"rma:recordCategory"}
+        data = {"name": name, "nodeType": "rma:recordCategory"}
         r = self._post(url, json=data)
         return r and r['entry']
 
     def createRecordFolder(self, parentId, name):
         url = self.gs_api_prefix + '/record-categories/' + parentId + '/children'
-        data = {"name": name, "nodeType":"rma:recordFolder"}
+        data = {"name": name, "nodeType": "rma:recordFolder"}
         r = self._post(url, json=data)
         return r and r['entry']
