@@ -229,11 +229,45 @@ class AcsClient:
         r = self._post(url, data=data)
 
     def getBulkImportStatus(self):
+        def text_or_blank(element):
+            return element.text if (element is not None) else ""
+
         url = self.urlbase + '/alfresco/s/bulkfsimport/status.xml'
         r = self._get(url)
         currentStatus = r.find('CurrentStatus')
         resultOfLastExecution = r.find('ResultOfLastExecution')
-        return {"currentStatus": currentStatus.text, "lastResult": resultOfLastExecution.text}
+        duration_in_ns = r.find('DurationInNS')
+        total_nodes_written = self._calculate_total_nodes_written(r)
+        nodes_per_second = self._calculate_nodes_per_second(duration_in_ns,total_nodes_written)
+
+        exception = r.find('./ErrorInformation/Exception')
+
+
+        return {"currentStatus": text_or_blank(currentStatus), "lastResult": text_or_blank(resultOfLastExecution), "durationInNS": text_or_blank(duration_in_ns), "nodesPerSecond": nodes_per_second, "exception": text_or_blank(exception)}
+
+    def _calculate_total_nodes_written(self, response):
+        def to_int_or_zero(element):
+            return int(element.text) if (element is not None) else 0
+
+        # Note: we count versions as a node
+        # from https://github.com/Alfresco/alfresco-repository/blob/ac38ac94ff4f9cbdf2671a9517781bda389a13c4/src/main/java/org/alfresco/repo/bulkimport/impl/BulkImportStatusImpl.java#L535
+        space_nodes_created = response.find('./TargetStatistics/SpaceNodesCreated')
+        space_nodes_replaced = response.find('./TargetStatistics/SpaceNodesReplaced')
+        content_nodes_created = response.find('./TargetStatistics/ContentNodesCreated')
+        content_nodes_replaced = response.find('./TargetStatistics/ContentNodesReplaced')
+        content_versions_created = response.find('./TargetStatistics/ContentVersionsCreated')
+
+        return to_int_or_zero(space_nodes_created) + to_int_or_zero(space_nodes_replaced) + to_int_or_zero(content_nodes_created) + to_int_or_zero(content_nodes_replaced) + to_int_or_zero(content_versions_created)
+
+    def _calculate_nodes_per_second(self, duration_in_ns, total_nodes_written):
+        nodes_per_second = ""
+        if (duration_in_ns is not None) and (duration_in_ns.text != "0"):
+            i_duration_in_ns = int(duration_in_ns.text)
+            if(i_duration_in_ns > 0):
+                duration_in_s = i_duration_in_ns / 1000000000
+                if(duration_in_s > 0):
+                    nodes_per_second = str((total_nodes_written / duration_in_s))
+        return nodes_per_second
 
     ######################################
     # file plan APIs
