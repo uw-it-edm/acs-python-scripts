@@ -47,15 +47,15 @@ def startBulkImport(acsClient, conf, profile):
                         status = acsClient.getBulkImportStatus()
                     print("")  # new line
 
-                if status['lastResult'].lower() == 'succeeded':
-                    logging.info('Uploaded content from ' + sourceDirectory + ' to ' + targetPath)
-                    logging.info('Throughput: ' + status['nodesPerSecond'])
-                    logging.info('Duration in ns: ' + status['durationInNS'])
-                else:
-                    logging.error('Failed to upload content from ' + sourceDirectory + ' to ' + targetPath)
-                    logging.error('Current Status: ' + status['currentStatus'])
-                    logging.error('Last Result: ' + status['lastResult'])
-                    logging.error('Exception: ' + status['exception'])
+                    if status['lastResult'].lower() == 'succeeded':
+                        logging.info('Uploaded content from ' + sourceDirectory + ' to ' + targetPath)
+                        logging.info('Throughput: ' + status['nodesPerSecond'])
+                        logging.info('Duration in ns: ' + status['durationInNS'])
+                    else:
+                        logging.error('Failed to upload content from ' + sourceDirectory + ' to ' + targetPath)
+                        logging.error('Current Status: ' + status['currentStatus'])
+                        logging.error('Last Result: ' + status['lastResult'])
+                        logging.error('Exception: ' + status['exception'])
             else:
                 logging.debug('Skipping Import to "' + targetPath + '" for specified profile: "' + profile + '"')
 
