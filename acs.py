@@ -58,39 +58,58 @@ def getAcsClient(args, conf):
 
 
 #############################################
-# create or update rules
-def createOrUpdateFolderRule(acs, folderPath, rule):
+# syn rules between configuration and deployment
+def syncFolderRules(acs, folder, rules):
+    if not rules or len(rules) <= 0:
+        return
+
+    folderPath = folder
+    if folder.find("/documentLibrary") < 0:
+       folderPath = folder + '/documentLibrary'  # folder path
+
     folderNode = acs.getNodeByPath(folderPath)
     if not folderNode:
-        logging.warn('folder ' + folderPath + ' does not exist')
+        logging.warn('folder ' + folder + ' does not exist')
         return
+
+    logging.info('sync rules for folder "' + folder)
 
     folderId = folderNode['id']
 
     existingRules = acs.getRules(folderId)
     existingRuleIds = {rule['title']: rule['id'] for rule in existingRules}
-    title = rule['title']
-    if title in existingRuleIds:
-        # it is a lot easier and cheap to always update than trying to find if the rule config has changed
-        logging.info('updating rule "' + title + '"for folder ' + folderPath + "  " + existingRuleIds[title])
-        result = acs.updateRule(folderId, existingRuleIds[title], rule)
-    else:
-        logging.info('Creating rule "' + title + '" for folder: ' + folderPath)
-        result = acs.createRule(folderId, rule)
+    for rule in rules:
+        title = rule['title']
+        if title in existingRuleIds:
+            # it is a lot easier and cheap to always update than trying to find if the rule config has changed
+            logging.info('  update rule "' + title + '"for folder ' + folder)
+            result = acs.updateRule(folderId, existingRuleIds[title], rule)
+            del existingRuleIds[title] # delete processed rule
+        else:
+            logging.info('  create rule "' + title + '" for folder: ' + folder)
+            result = acs.createRule(folderId, rule)
 
+    # delete rules no longer in config
+    for title, ruleId in existingRuleIds.items():
+        logging.info('  delete rule "' + title + '" from folder: ' + folder)
+        acs.deleteRule(folderId, ruleId)
 
 #############################################
-# create or update rule
-def createOrUpdateRule(acs, rule):
-    if not (rule and rule['folders'] and rule['rule']):
-        return
+def syncAllRules(acs, allRules):
+    if allRules:
+        # collect rules for each folder
+        folderRules = {}
+        for rule in allRules:
+            folders = rule['folders']
+            for f in folders:
+                if f in folderRules:
+                    folderRules[f].append(rule['rule'])
+                else:
+                    folderRules[f] = [rule['rule']]
 
-    folders = rule['folders']
-    for folder in folders:
-        if folder.find("/documentLibrary") < 0:
-            folder = folder + '/documentLibrary'  # folder path
-        createOrUpdateFolderRule(acs, folder, rule['rule'])
-
+        # sync folder rules
+        for f, rules in folderRules.items():
+            syncFolderRules(acs, f, rules)
 
 #############################################
 # set folder permissions
@@ -297,10 +316,7 @@ def main():
     rules = None
     if args.rules:
         rules = load_yml_file(args.rules)
-
-    if rules:
-        for rule in rules:
-            createOrUpdateRule(acs, rule);
+        syncAllRules(acs, rules)
 
     # file plan
     filePlan = None

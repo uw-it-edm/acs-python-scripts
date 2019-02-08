@@ -69,6 +69,10 @@ class AcsClient:
         response = self.session.put(url, auth=self.auth, json=json, data=data, files=files)
         return self.handleResponse(response)
 
+    def _delete(self, url):
+        response = self.session.delete(url, auth=self.auth)
+        return self.handleResponse(response)
+
     ######################################
     # groups API
     def getGroup(self, id):
@@ -151,6 +155,11 @@ class AcsClient:
     def updateRule(self, folderId, ruleId, ruleData):
         url = self.web_script_api_prefix + '/node/workspace/SpacesStore/' + folderId + '/ruleset/rules/' + ruleId
         result = self._put(url, json=ruleData)
+        return result
+
+    def deleteRule(self, folderId, ruleId):
+        url = self.web_script_api_prefix + '/node/workspace/SpacesStore/' + folderId + '/ruleset/rules/' + ruleId
+        result = self._delete(url)
         return result
 
     ######################################
