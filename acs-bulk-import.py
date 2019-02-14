@@ -3,12 +3,14 @@
 # acs-bulk-import.yml - define import directory and target path
 # The time for bulk import depends on the amount of data to be imported.
 
-import sys 
-import time
 import argparse
 import logging
+import sys
+import time
+
 import util
 from AcsClient import AcsClient
+
 
 #############################################
 # get commandline arguments
@@ -19,6 +21,7 @@ def getArgs():
     parser.add_argument('-s', '--stage', choices=['dev', 'local', 'test', 'prod'], default='dev')
     parser.add_argument('-p', '--profile', required='false', help='Limit importing to only the specified profile')
     return parser.parse_args()
+
 
 #############################################
 def startBulkImport(acsClient, conf, profile):
@@ -46,10 +49,16 @@ def startBulkImport(acsClient, conf, profile):
 
                     if status['lastResult'].lower() == 'succeeded':
                         logging.info('Uploaded content from ' + sourceDirectory + ' to ' + targetPath)
+                        logging.info('Throughput: ' + status['nodesPerSecond'])
+                        logging.info('Duration in ns: ' + status['durationInNS'])
                     else:
-                        logging.info('Failed to upload content from ' + sourceDirectory + ' to ' + targetPath)
+                        logging.error('Failed to upload content from ' + sourceDirectory + ' to ' + targetPath)
+                        logging.error('Current Status: ' + status['currentStatus'])
+                        logging.error('Last Result: ' + status['lastResult'])
+                        logging.error('Exception: ' + status['exception'])
             else:
-                logging.debug('Skipping Import to "' + targetPath + '" for specified profile: "' +profile + '"')
+                logging.debug('Skipping Import to "' + targetPath + '" for specified profile: "' + profile + '"')
+
 
 def should_import_profile(profile, target_path):
     import_profile = True
@@ -58,6 +67,7 @@ def should_import_profile(profile, target_path):
         import_profile = target_pieces[2] == profile
 
     return import_profile
+
 
 #############################################
 # main
@@ -77,6 +87,7 @@ def main():
     startBulkImport(acsClient, biconf, args.profile)
 
     logging.info('End ' + sys.argv[0])
+
 
 #############################################
 if __name__ == "__main__":

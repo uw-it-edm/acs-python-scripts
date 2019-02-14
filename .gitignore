@@ -4,6 +4,9 @@
 *.yml
 *.cnf
 
+.vscode
+.idea
+
 export-*.csv
 
 !/.travis.yml

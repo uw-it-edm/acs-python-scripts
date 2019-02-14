@@ -2,17 +2,19 @@ import requests
 from xml.etree import ElementTree
 import util
 
+
 ######################################
 # convenience (module) functions
 # return full group Id
 def fullGroupId(groupId):
     return groupId if groupId.startswith('GROUP_') else 'GROUP_' + groupId
 
+
 #############################################
 class AcsClient:
     ######################################
     # constructor
-    def __init__(self, urlbase, user, pw):
+    def __init__(self, urlbase, user, pw, use_session=True):
         self.urlbase = urlbase
         self.api_prefix = urlbase + '/alfresco/api/-default-/public/alfresco/versions/1'
         self.gs_api_prefix = urlbase + '/alfresco/api/-default-/public/gs/versions/1'
@@ -20,7 +22,10 @@ class AcsClient:
         self.user = user
         self.pw = pw
         self.auth = (user, pw)
-        self.session = requests.Session()
+        if use_session:
+            self.session = requests.Session()
+        else:
+            self.session = requests
 
     @classmethod
     def fromConfig(cls, filename=None, stage='dev'):
@@ -64,6 +69,10 @@ class AcsClient:
         response = self.session.put(url, auth=self.auth, json=json, data=data, files=files)
         return self.handleResponse(response)
 
+    def _delete(self, url):
+        response = self.session.delete(url, auth=self.auth)
+        return self.handleResponse(response)
+
     ######################################
     # groups API
     def getGroup(self, id):
@@ -79,7 +88,7 @@ class AcsClient:
 
     def createGroup(self, id, displayName, parentId='GROUP_uw_groups'):
         url = self.api_prefix + '/groups'
-        data = {"id": id, "displayName": displayName, "parentIds":[fullGroupId(parentId)]}
+        data = {"id": id, "displayName": displayName, "parentIds": [fullGroupId(parentId)]}
         r = self._post(url, json=data)
         return r and r['entry']
 
@@ -115,7 +124,7 @@ class AcsClient:
         return r and r['entry']
 
     def createFolder(self, parentId, folderName):
-        url = self.api_prefix + '/nodes/' + parentId+ '/children'
+        url = self.api_prefix + '/nodes/' + parentId + '/children'
         data = {"name": folderName, "nodeType": "cm:folder"}
         r = self._post(url, json=data)
         return r and r['entry']
@@ -148,6 +157,11 @@ class AcsClient:
         result = self._put(url, json=ruleData)
         return result
 
+    def deleteRule(self, folderId, ruleId):
+        url = self.web_script_api_prefix + '/node/workspace/SpacesStore/' + folderId + '/ruleset/rules/' + ruleId
+        result = self._delete(url)
+        return result
+
     ######################################
     # people API
     def getUser(self, name):
@@ -159,7 +173,7 @@ class AcsClient:
     def createAdminAppUser(self, name, password):
         url = self.api_prefix + '/people'
         data = {"id": name, "password": password, "description": "app user",
-                "firstName": name,"email":name, "emailNotificationsEnabled":"false"}
+                "firstName": name, "email": name, "emailNotificationsEnabled": "false"}
         r = self._post(url, json=data)
         return r and r['entry']
 
@@ -219,15 +233,50 @@ class AcsClient:
     # bulk import API
     def startBulkImport(self, sourceDir, targetPath, batchSize=20, numThreads=10, existingFileMode='REPLACE'):
         url = self.urlbase + '/alfresco/s/bulkfsimport/initiate'
-        data = {"sourceDirectory": sourceDir, "targetPath":targetPath, "batchSize":batchSize, "numThreads": numThreads, "existingFileMode":existingFileMode}
+        data = {"sourceDirectory": sourceDir, "targetPath": targetPath, "batchSize": batchSize,
+                "numThreads": numThreads, "existingFileMode": existingFileMode}
         r = self._post(url, data=data)
 
     def getBulkImportStatus(self):
+        def text_or_blank(element):
+            return element.text if (element is not None) else ""
+
         url = self.urlbase + '/alfresco/s/bulkfsimport/status.xml'
         r = self._get(url)
         currentStatus = r.find('CurrentStatus')
         resultOfLastExecution = r.find('ResultOfLastExecution')
-        return {"currentStatus": currentStatus.text, "lastResult":resultOfLastExecution.text}
+        duration_in_ns = r.find('DurationInNS')
+        total_nodes_written = self._calculate_total_nodes_written(r)
+        nodes_per_second = self._calculate_nodes_per_second(duration_in_ns,total_nodes_written)
+
+        exception = r.find('./ErrorInformation/Exception')
+
+
+        return {"currentStatus": text_or_blank(currentStatus), "lastResult": text_or_blank(resultOfLastExecution), "durationInNS": text_or_blank(duration_in_ns), "nodesPerSecond": nodes_per_second, "exception": text_or_blank(exception)}
+
+    def _calculate_total_nodes_written(self, response):
+        def to_int_or_zero(element):
+            return int(element.text) if (element is not None) else 0
+
+        # Note: we count versions as a node
+        # from https://github.com/Alfresco/alfresco-repository/blob/ac38ac94ff4f9cbdf2671a9517781bda389a13c4/src/main/java/org/alfresco/repo/bulkimport/impl/BulkImportStatusImpl.java#L535
+        space_nodes_created = response.find('./TargetStatistics/SpaceNodesCreated')
+        space_nodes_replaced = response.find('./TargetStatistics/SpaceNodesReplaced')
+        content_nodes_created = response.find('./TargetStatistics/ContentNodesCreated')
+        content_nodes_replaced = response.find('./TargetStatistics/ContentNodesReplaced')
+        content_versions_created = response.find('./TargetStatistics/ContentVersionsCreated')
+
+        return to_int_or_zero(space_nodes_created) + to_int_or_zero(space_nodes_replaced) + to_int_or_zero(content_nodes_created) + to_int_or_zero(content_nodes_replaced) + to_int_or_zero(content_versions_created)
+
+    def _calculate_nodes_per_second(self, duration_in_ns, total_nodes_written):
+        nodes_per_second = ""
+        if (duration_in_ns is not None) and (duration_in_ns.text != "0"):
+            i_duration_in_ns = int(duration_in_ns.text)
+            if(i_duration_in_ns > 0):
+                duration_in_s = i_duration_in_ns / 1000000000
+                if(duration_in_s > 0):
+                    nodes_per_second = str((total_nodes_written / duration_in_s))
+        return nodes_per_second
 
     ######################################
     # file plan APIs
@@ -238,7 +287,7 @@ class AcsClient:
 
     def createRmSite(self, title='Records Management', description='Records Management Site', compliance='DOD5015'):
         url = self.gs_api_prefix + '/gs-sites'
-        data = {"title": title, "description": description, "compliance":compliance}
+        data = {"title": title, "description": description, "compliance": compliance}
         r = self._post(url, json=data)
         return r and r['entry']
 
@@ -260,12 +309,12 @@ class AcsClient:
 
     def createRecordCategory(self, parentId, name):
         url = self.gs_api_prefix + '/record-categories/' + parentId + '/children'
-        data = {"name": name, "nodeType":"rma:recordCategory"}
+        data = {"name": name, "nodeType": "rma:recordCategory"}
         r = self._post(url, json=data)
         return r and r['entry']
 
     def createRecordFolder(self, parentId, name):
         url = self.gs_api_prefix + '/record-categories/' + parentId + '/children'
-        data = {"name": name, "nodeType":"rma:recordFolder"}
+        data = {"name": name, "nodeType": "rma:recordFolder"}
         r = self._post(url, json=data)
         return r and r['entry']

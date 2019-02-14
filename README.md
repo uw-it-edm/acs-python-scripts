@@ -2,6 +2,16 @@
 [![Build Status](https://travis-ci.org/uw-it-edm/acs-python-scripts.svg?branch=develop)](https://travis-ci.org/uw-it-edm/acs-python-scripts)
 [![Coverage Status](https://coveralls.io/repos/github/uw-it-edm/acs-python-scripts/badge.svg?branch=develop)](https://coveralls.io/github/uw-it-edm/acs-python-scripts?branch=develop)
 
+## Run script 
+This python script requires python2 and a few dependencies. 
+Easiest way to run is by creating a python virtual environment : 
+
+1. If you haven't installed it before, run `pip2 install virtualenv`
+2. Activate the venv : `virtualenv --python=/usr/local/bin/python2 venv`
+3. Activate the virutal environment : `source venv/bin/activate` 
+4. Install dependencies : `pip install -r requirements.txt`
+5. Execute one of the scripts : `python acs.py`
+
 ## Create Site
 
 #### To create a new site:
